@@ -685,6 +685,8 @@ def impl(context, utility, extra_args=''):
     run_gpcommand(context, cmd)
 
 
+@given('the user asynchronously runs {utility} with input file and additional args "{extra_args}" and the process is saved')
+@then('the user asynchronously runs {utility} with input file and additional args "{extra_args}" and the process is saved')
 @when('the user asynchronously runs {utility} with input file and additional args "{extra_args}" and the process is saved')
 def impl(context, utility, extra_args=''):
     cmd = "%s -i %s %s" % (utility, context.mirror_context.input_file_path(), extra_args)

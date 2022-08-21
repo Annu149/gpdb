@@ -400,6 +400,10 @@ try:
     """ Reinitialize gparray after the new mirrors are in place. """
     gpArrayInstance = GpArray.initFromCatalog(dburl, utility=True)
     mirrorDirectories = set((seg.getSegmentHostName(),seg.getSegmentContentId()) for seg in gpArrayInstance.getDbList() if seg.isSegmentMirror())
+    newMirrorAddressDir = set((seg.getSegmentAddress(), seg.getSegmentDataDirectory()) for seg in gpArrayInstance.getDbList() if seg.isSegmentMirror())
+
+    """If mirror has not moved to new location due to any reason, skip deletion of old mirror directory"""
+    mirrorsToDelete = [mirror for mirror in mirrorsToDelete if (mirror.address, mirror.dataDirectory) not in newMirrorAddressDir]
 
     """ Delete old mirror directories. """
     if numberOfWorkers > 0:

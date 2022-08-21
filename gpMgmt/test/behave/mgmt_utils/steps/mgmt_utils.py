@@ -421,6 +421,8 @@ def impl(context, content):
     dburl = dbconn.DbURL(hostname=host, port=port, dbname='template1')
     wait_for_desired_query_result(dburl, query, desired_result, utility=True)
 
+@given('the user waits until recovery_progress.file is created in {logdir} and verifies its format')
+@when('the user waits until recovery_progress.file is created in {logdir} and verifies its format')
 @then('the user waits until recovery_progress.file is created in {logdir} and verifies its format')
 def impl(context, logdir):
     attempt = 0
@@ -622,6 +624,13 @@ def impl(context, process_name):
 @when('the user asynchronously sets up to end {process_name} process with SIGHUP')
 def impl(context, process_name):
     command = "ps ux | grep bin/%s | awk '{print $2}' | xargs kill -9" % (process_name)
+    run_async_command(context, command)
+
+@given('the user asynchronously ends {process_name} process with SIGHUP')
+@when('the user asynchronously ends {process_name} process with SIGHUP')
+@then('the user asynchronously ends {process_name} process with SIGHUP')
+def impl(context, process_name):
+    command = "ps ux | grep %s | awk '{print $2}' | xargs kill -9" % (process_name)
     run_async_command(context, command)
 
 @when('the user asynchronously sets up to end gpcreateseg process when it starts')
@@ -1515,7 +1524,8 @@ def impl(context):
 
     return
 
-
+@given('verify that mirror on content {content_ids} is {expected_status}')
+@when('verify that mirror on content {content_ids} is {expected_status}')
 @then('verify that mirror on content {content_ids} is {expected_status}')
 def impl(context, content_ids, expected_status):
     if content_ids == 'None':
