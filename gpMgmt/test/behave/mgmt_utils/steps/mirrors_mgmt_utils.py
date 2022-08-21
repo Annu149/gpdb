@@ -823,3 +823,18 @@ def impl(context):
         And user can start transactions
         And the segments are synchronized
         ''')
+
+
+@given('the user makes sure segments with content {contentIds} have running pg_basebackup')
+@when('the user makes sure segments with content {contentIds} have running pg_basebackup')
+@then('the user makes sure segments with content {contentIds} have running pg_basebackup')
+def impl(context, contentIds):
+    context.execute_steps(u'''
+        Given user immediately stops all primary processes for content 0,1,2
+        And user can start transactions
+        And the user suspend the walsender on the primary on content {}
+        And sql "DROP TABLE if exists test_recoverseg; CREATE TABLE test_recoverseg AS SELECT generate_series(1,100000000) AS i" is executed in "postgres" db
+        And the "test_recoverseg" table row count in "postgres" is saved
+        And the user asynchronously runs "gprecoverseg -aF" and the process is saved
+        And the user waits until recovery_progress.file is created in gpAdminLogs and verifies its format
+        ''').format(contentIds)

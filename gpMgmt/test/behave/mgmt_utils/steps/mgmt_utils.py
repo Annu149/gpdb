@@ -446,6 +446,33 @@ def impl(context, logdir):
         if attempt == num_retries:
             raise Exception('Timed out after {} retries'.format(num_retries))
 
+@given('the user waits until there is no {expected_file} file in coordinator_data_directory')
+@when('the user waits until there is no {expected_file} file in coordinator_data_directory')
+@then('the user waits until there is no {expected_file} file in coordinator_data_directory')
+def impl(context, expected_file):
+    attempt = 0
+    num_retries = 60000
+
+    all_segments = GpArray.initFromCatalog(dbconn.DbURL()).getDbList()
+    all_segment_hosts = [seg.getSegmentHostName() for seg in all_segments if seg.getSegmentContentId() >= -1]
+
+    while attempt < num_retries:
+        attempt += 1
+        for seg_host in all_segment_hosts:
+            log_dir = "%s/gpAdminLogs" % os.path.expanduser("~")
+            listdir_cmd = Command(name="list logfiles on host",
+                                  cmdStr="ls -l {}/{} | wc -l".format(log_dir, expected_file),
+                                  remoteHost=seg_host, ctxt=REMOTE)
+            listdir_cmd.run(validateAfter=True)
+            ls_outs = listdir_cmd.get_results().stdout
+            if int(ls_outs) == 0:
+                all_segment_hosts.remove(seg_host)
+        if len(all_segment_hosts) == 0:
+            break
+        time.sleep(0.01)
+        if attempt == num_retries:
+            raise Exception('Timed out after {} retries'.format(num_retries))
+
 @then( 'verify if the gprecoverseg.lock directory is present in coordinator_data_directory')
 def impl(context):
     gprecoverseg_lock_file = "%s/gprecoverseg.lock" % gp.get_coordinatordatadir()

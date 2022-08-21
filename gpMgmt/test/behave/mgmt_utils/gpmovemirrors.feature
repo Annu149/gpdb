@@ -235,7 +235,6 @@ Feature: Tests for gpmovemirrors
   @skip_cleanup
   Scenario: gpmovemirrors gives error if pg_basebackup is already running for one of the mirrors to be moved
     Given the database is running
-    And the user executes steps required for running in place full recovery for all failed contents
     And all the segments are running
     And the segments are synchronized
     And all files in gpAdminLogs directory are deleted on all hosts in the cluster
@@ -261,6 +260,7 @@ Feature: Tests for gpmovemirrors
     And verify that mirror on content 1,2 is up
     And verify that mirror on content 0 is down
     And the user asynchronously ends "pg_basebackup" process with SIGHUP
+    And an FTS probe is triggered
     And the user reset the walsender on the primary on content 0
     And user can start transactions
     And an FTS probe is triggered
@@ -277,7 +277,6 @@ Feature: Tests for gpmovemirrors
   @skip_cleanup
   Scenario: gpmovemirrors gives error if pg_basebackup is already running for some of the mirrors to be moved
     Given the database is running
-    And the user executes steps required for running in place full recovery for all failed contents
     And all the segments are running
     And the segments are synchronized
     And all files in gpAdminLogs directory are deleted on all hosts in the cluster
@@ -304,6 +303,7 @@ Feature: Tests for gpmovemirrors
     And verify that mirror on content 2 is up
     And verify that mirror on content 0,1 is down
     And the user asynchronously ends "pg_basebackup" process with SIGHUP
+    And an FTS probe is triggered
     And the user reset the walsender on the primary on content 0
     And the user reset the walsender on the primary on content 1
     And user can start transactions
@@ -321,7 +321,6 @@ Feature: Tests for gpmovemirrors
   @skip_cleanup
   Scenario: gpmovemirrors gives error if pg_basebackup ia already running for all mirrors to be moved
     Given the database is running
-    And the user executes steps required for running in place full recovery for all failed contents
     And all the segments are running
     And the segments are synchronized
     And all files in gpAdminLogs directory are deleted on all hosts in the cluster
@@ -344,6 +343,7 @@ Feature: Tests for gpmovemirrors
     And gprecoverseg should return a return code of 0
     And gpmovemirrors should return a return code of 0
     And the user asynchronously ends "pg_basebackup" process with SIGHUP
+    And an FTS probe is triggered
     And the user reset the walsender on the primary on content 0
     And the user reset the walsender on the primary on content 1
     And the user reset the walsender on the primary on content 2

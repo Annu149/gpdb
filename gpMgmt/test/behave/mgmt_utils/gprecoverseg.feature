@@ -771,6 +771,7 @@ Feature: gprecoverseg tests
     And gprecoverseg should return a return code of 0
     And verify that mirror on content 1,2 is up
     When the user asynchronously ends "pg_basebackup" process with SIGHUP
+    And an FTS probe is triggered
     And the user reset the walsender on the primary on content 0
     And user can start transactions
     And an FTS probe is triggered
@@ -807,6 +808,7 @@ Feature: gprecoverseg tests
     And gprecoverseg should return a return code of 0
     And verify that mirror on content 2 is up
     When the user asynchronously ends "pg_basebackup" process with SIGHUP
+    And an FTS probe is triggered
     And the user reset the walsender on the primary on content 0
     And the user reset the walsender on the primary on content 1
     And user can start transactions
@@ -842,12 +844,14 @@ Feature: gprecoverseg tests
     And gprecoverseg should print "No segments to recover" to stdout
     And gprecoverseg should return a return code of 0
     When the user asynchronously ends "pg_basebackup" process with SIGHUP
+    And an FTS probe is triggered
     And the user reset the walsender on the primary on content 0
     And the user reset the walsender on the primary on content 1
     And the user reset the walsender on the primary on content 2
     And user can start transactions
     And an FTS probe is triggered
     And verify that mirror on content 0,1,2 is down
+    And the user waits until there is no "pg_baseabackup*" file in coordinator_data_directory
     And the user runs "gprecoverseg -avF"
     Then gprecoverseg should print "No basebackup running" to stdout
     And gprecoverseg should return a return code of 0
@@ -889,6 +893,7 @@ Feature: gprecoverseg tests
     And user can start transactions
     And an FTS probe is triggered
     And verify that mirror on content 0,1,2 is down
+    And the user waits until there is no "pg_baseabackup*" file in coordinator_data_directory
     And the user runs gprecoverseg with input file and additional args "-av"
     Then gprecoverseg should print "No basebackup running" to stdout
     And gprecoverseg should return a return code of 0

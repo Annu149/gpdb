@@ -8,7 +8,8 @@ import tempfile
 import gppylib
 from gparray import Segment, GpArray
 from gppylib.programs.clsRecoverSegment_triples import RecoveryTripletsUserConfigFile, RecoveryTripletsFactory, RecoveryTriplet
-from test.unit.gp_unittest import GpTestCase
+from test.unit.gp_unittest import GpTestCase, FakeCursor
+from gppylib.programs.clsRecoverSegment_triples import RecoveryTripletsUserConfigFile, RecoveryTripletsFactory, RecoveryTriplet, get_segments_with_running_basebackup
 
 
 class RecoveryTripletsFactoryTestCase(GpTestCase):
@@ -739,6 +740,18 @@ class RecoveryTripletsUserConfigFileParserTestCase(GpTestCase):
 
                 with self.assertRaisesRegex(Exception, test["expected"]):
                     self.run_single_parser_test(test)
+
+    @patch('gppylib.db.dbconn.connect', side_effect=Exception())
+    def test_get_segments_with_running_basebackup_conn_exception(self, mock1):
+        with self.assertRaises(Exception) as ex:
+            get_segments_with_running_basebackup()
+            self.assertTrue('Failed to query gp_stat_replication' in str(ex.exception))
+
+    @patch('gppylib.db.dbconn.query', side_effect=Exception())
+    def test_get_segments_with_running_basebackup_exception(self, mock1):
+        with self.assertRaises(Exception) as ex:
+            get_segments_with_running_basebackup()
+            self.assertTrue('Failed to query gp_stat_replication:' in str(ex.exception))
 
     @staticmethod
     def _get_expected_config(config_str):
