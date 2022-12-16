@@ -3851,4 +3851,27 @@ def impl(context, contentid):
 
     if str(contentid) not in segments_with_running_basebackup:
         raise Exception("pg_basebackup entry was not found for content %s in gp_stat_replication" % contentid)
+
+@given('user waits until gp_stat_replication table has no pg_basebackup entries for content {contentids}')
+@when('user waits until gp_stat_replication table has no pg_basebackup entries for content {contentids}')
+@then('user waits until gp_stat_replication table has no pg_basebackup entries for content {contentids}')
+def impl(context, contentids):
+    retries = 300
+    content_ids = contentids.split(',')
+    content_ids = ', '.join(c for c in content_ids)
+    sql = "select count(*) from gp_stat_replication where application_name = 'pg_basebackup' and gp_segment_id in (%s)" %(content_ids)
+
+    for i in range(retries):
+        try:
+            with closing(dbconn.connect(dbconn.DbURL())) as conn:
+                res = dbconn.execSQLForSingleton(conn, sql)
+        except Exception as e:
+            raise Exception("Failed to query gp_stat_replication: %s" % str(e))
+        if res == 0:
+            no_basebackup = True
+            break
+        time.sleep(1)
+
+    if not no_basebackup:
+        raise Exception("pg_basebackup entry was found for contents %s in gp_stat_replication after %d retries" % (contentids, retries))
     
