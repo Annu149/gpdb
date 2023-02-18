@@ -688,8 +688,17 @@ class GpSystemStateProgram:
         if segments_under_recovery and os.path.exists(gprecoverseg_lock_dir):
             logger.info("----------------------------------------------------")
             logger.info("Segments in recovery")
-            logSegments(segments_under_recovery, False, [VALUE_RECOVERY_TYPE, VALUE_RECOVERY_COMPLETED_BYTES, VALUE_RECOVERY_TOTAL_BYTES,
-                                                          VALUE_RECOVERY_PERCENTAGE])
+            # for differential recovery rsync doesn't give total bytes in progress option.
+            # it gives totaly bytes to sync in stats with dry-run option for that reason for now
+            # keeping total bytes col hidden.
+
+            if data.getStrValue(segments_under_recovery[0], VALUE_RECOVERY_TYPE) == 'differential':
+                additional_fields_to_log = [VALUE_RECOVERY_TYPE, VALUE_RECOVERY_COMPLETED_BYTES,
+                                            VALUE_RECOVERY_PERCENTAGE]
+            else:
+                additional_fields_to_log = [VALUE_RECOVERY_TYPE, VALUE_RECOVERY_COMPLETED_BYTES,
+                                            VALUE_RECOVERY_TOTAL_BYTES, VALUE_RECOVERY_PERCENTAGE]
+            logSegments(segments_under_recovery, False, additional_fields_to_log)
             exitCode = 1
 
         # final output -- no errors, then log this message
@@ -971,10 +980,13 @@ class GpSystemStateProgram:
         with open(recovery_progress_file, 'r') as fp:
             for line in fp:
                 recovery_type, dbid, progress = line.strip().split(':',2)
-                pattern = re.compile(get_recovery_progress_pattern())
+                pattern = re.compile(get_recovery_progress_pattern(recovery_type))
                 if re.search(pattern, progress):
                     bytes, units, precentage_str = progress.strip().split(' ',2)
-                    completed_bytes, total_bytes = bytes.split('/')
+                    if recovery_type == 'differential':
+                        completed_bytes, total_bytes = bytes, ''
+                    else:
+                        completed_bytes, total_bytes = bytes.split('/')
                     percentage = re.search(r'(\d+\%)', precentage_str).group()
                     recovery_progress_by_dbid[int(dbid)] = [recovery_type, completed_bytes, total_bytes, percentage]
 

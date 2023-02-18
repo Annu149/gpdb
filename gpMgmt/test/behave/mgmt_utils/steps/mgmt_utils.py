@@ -471,7 +471,7 @@ def impl(context, logdir):
                 context.recovery_lines = fp.readlines()
             for line in context.recovery_lines:
                 recovery_type, dbid, progress = line.strip().split(':', 2)
-                progress_pattern = re.compile(get_recovery_progress_pattern())
+                progress_pattern = re.compile(get_recovery_progress_pattern(recovery_type))
                 # TODO: assert progress line in the actual hosts bb/rewind progress file
                 if re.search(progress_pattern, progress) and dbid.isdigit() and recovery_type in ['full', 'incremental']:
                     return
@@ -3995,3 +3995,25 @@ def impl(context, contentids):
 
      if not no_basebackup:
          raise Exception("pg_basebackup entry was found for contents %s in gp_stat_replication after %d retries" % (contentids, retries))
+
+
+@then('gprecoverseg should print backup in progress warning for segment with content {contentids}')
+def impl(context, contentids):
+
+    gparray = GpArray.initFromCatalog(dbconn.DbURL())
+    segments_pairs = gparray.segmentPairs
+    content_ids = [int(i) for i in contentids.split(',')]
+
+    for segpair in segments_pairs:
+        primary = segpair.primaryDB
+        mirror = segpair.mirrorDB
+        if primary.content in content_ids:
+            msg = "Skipping differential recovery of segment on host {} and port {} because it's peer segment on host " \
+                  "{} and port {} has already backup in progress".format(mirror.getSegmentHostName(), mirror.getSegmentPort(),
+                                                                         primary.getSegmentHostName(), primary.getSegmentPort())
+
+        try:
+            context.execute_steps(''' Then gprecoverseg should print "{}" to stdout'''.format(msg))
+        except:
+            raise Exception("Could not find expected warning message for content {} in stdout".format(primary.content))
+
