@@ -305,21 +305,19 @@ class PgBaseBackup(Command):
         cmd_tokens.append('-p')
         cmd_tokens.append(source_port)
 
-        # This is needed to handle Greenplum tablespaces
-        cmd_tokens.append('--target-gp-dbid')
-        cmd_tokens.append(str(target_gp_dbid))
-
         if writeconffilesonly:
             cmd_tokens.append('--write-conf-files-only')
-
-
-        # if there is already slot present and create-slot arg is true it will give error,
-        # there is no option available in upstream postgres so that existing slot can be reused
-        # it's good choice to drop a existing available slot and recreate the new one
-        # if the slot does not already exist or drop slot is success we will create a new slot
-        # but if we are not able to drop the slot in that case,
-        # we will consider it as an error and will avoid creating a new slot
+            # This is needed to handle Greenplum tablespaces
+            cmd_tokens.append('--target-gp-dbid')
+            cmd_tokens.append(str(target_gp_dbid))
         else:
+
+            # if there is already slot present and create-slot arg is true it will give error,
+            # there is no option available in upstream postgres so that existing slot can be reused
+            # it's good choice to drop a existing available slot and recreate the new one
+            # if the slot does not already exist or drop slot is success we will create a new slot
+            # but if we are not able to drop the slot in that case,
+            # we will consider it as an error and will avoid creating a new slot
             if create_slot:
                 pg_slot = PgReplicationSlot(source_host, source_port, replication_slot_name)
                 if pg_slot.slot_exists():
@@ -336,13 +334,15 @@ class PgBaseBackup(Command):
             # failures with appendoptimized tables.
             cmd_tokens.append('--no-verify-checksums')
 
-
-
             if forceoverwrite:
                 cmd_tokens.append('--force-overwrite')
 
             if recovery_mode:
                 cmd_tokens.append('--write-recovery-conf')
+
+            # This is needed to handle Greenplum tablespaces
+            cmd_tokens.append('--target-gp-dbid')
+            cmd_tokens.append(str(target_gp_dbid))
 
             # We exclude certain unnecessary directories from being copied as they will greatly
             # slow down the speed of gpinitstandby if containing a lot of data
@@ -356,17 +356,17 @@ class PgBaseBackup(Command):
                     cmd_tokens.append('-E')
                     cmd_tokens.append(path)
 
-            cmd_tokens.append('--progress')
-            cmd_tokens.append('--verbose')
+        cmd_tokens.append('--progress')
+        cmd_tokens.append('--verbose')
 
-            if progress_file:
-                cmd_tokens.append('> %s 2>&1' % pipes.quote(progress_file))
+        if progress_file:
+            cmd_tokens.append('> %s 2>&1' % pipes.quote(progress_file))
 
-            cmd_str = ' '.join(cmd_tokens)
+        cmd_str = ' '.join(cmd_tokens)
 
-            self.command_tokens = cmd_tokens
+        self.command_tokens = cmd_tokens
 
-            Command.__init__(self, 'pg_basebackup', cmd_str, ctxt=ctxt, remoteHost=remoteHost)
+        Command.__init__(self, 'pg_basebackup', cmd_str, ctxt=ctxt, remoteHost=remoteHost)
 
     @staticmethod
     def _xlog_arguments(replication_slot_name):

@@ -152,7 +152,7 @@ class DifferentialRecovery(Command):
             "pg_internal.init",
             "postmaster.pid",
             "postmaster.opts",
-            "recovery.conf",  # will be created by pg_basebackup --justWriteConfFiles
+            "recovery.conf",  # will be created by pg_basebackup --writeconffilesonly
             "standby.signal",  # will be created later point of time
             "tablespace_map",
             "backup_label",
@@ -241,7 +241,7 @@ class DifferentialRecovery(Command):
         for tablespace_location in tablespaces:
             if not tablespace_location[0].startswith(self.recovery_info.target_datadir):
                 cmd = Rsync(name="Sync tabelspace",
-                            srcFile=tablespace_location[0],
+                            srcFile=tablespace_location[0] + "/",
                             dstFile=tablespace_location[0],
                             srcHost=self.recovery_info.source_hostname,
                             progress=True,

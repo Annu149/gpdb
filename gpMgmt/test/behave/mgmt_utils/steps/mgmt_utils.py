@@ -4017,3 +4017,35 @@ def impl(context, contentids):
         except:
             raise Exception("Could not find expected warning message for content {} in stdout".format(primary.content))
 
+@given('the user creates {num} number of files of {size} size(in MB) on primary on content {content}')
+@when('the user creates {num} number of files of {size} size(in MB) on primary on content {content}')
+def impl(context, num, size, content ):
+    gparray = GpArray.initFromCatalog(dbconn.DbURL())
+    segments = gparray.getDbList()
+    context.tempHostToFile = defaultdict(list)
+
+    for seg in segments:
+        if seg.content == int(content) and seg.role == 'p':
+            hostname = seg.getSegmentHostName()
+            datadir = seg.getSegmentDataDirectory()
+            break
+
+    context.tempHostToFile[hostname].append(datadir)
+
+    for i in range(int(num)):
+        outfile = os.path.join(datadir,"testfile{}.txt".format(i))
+        cmd = Command(name="create file",
+                      cmdStr="dd if=/dev/zero of={} bs=1M count={}".format(outfile, size),
+                      remoteHost=hostname, ctxt=REMOTE)
+        cmd.run(validateAfter=True)
+
+@given('the user remove created temp files')
+@when('the user remove created temp files')
+@then('the user remove created temp files')
+def impl(context):
+
+    for host, datadir in context.tempHostToFile.items():
+        cmd = Command(name="delete file",
+                      cmdStr="rm -rf {}/testfile*.txt".format(datadir),
+                      remoteHost=host, ctxt=REMOTE)
+        cmd.run(validateAfter=True)
