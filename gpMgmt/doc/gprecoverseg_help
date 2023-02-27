@@ -10,7 +10,7 @@ Synopsis
 gprecoverseg [-p <new_recover_host>[,...]]
              |-i <recover_config_file> 
              [-d <coordinator_data_directory>]
-             [-B <batch_size>] [-b <segment_batch_size>] [--differential <boolean>]
+             [-B <batch_size>] [-b <segment_batch_size>] [--differential]
              [-F] [-a] [-q] [-s] [--no-progress] [-l <logfile_directory>]
 
 

@@ -203,7 +203,7 @@ class SetupForIncrementalRecoveryTestCase(GpTestCase):
         self._assert_checkpoint_query()
         self._assert_cmd_passed()
 
-    @patch('gpsegsetuprecovery.Command', return_value=Command('rc1_cmd', 'echo 1 | grep 2'))
+    @patch('gppylib.commands.pg.Command', return_value=Command('rc1_cmd', 'echo 1 | grep 2'))
     def test_remove_pid_failed(self, mock_cmd):
         self.setup_for_incremental_recovery_cmd.run()
         self._assert_checkpoint_query()

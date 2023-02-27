@@ -464,6 +464,19 @@ def impl(context, content_ids):
         rm_cmd.run(validateAfter=True)
 
 
+@given("the mode of mirror data directories is changed to {mode} for content {content_ids}")
+@when("the mode of mirror data directories is changed to {mode} for content {content_ids}")
+def impl(context, mode, content_ids):
+    content_list = [int(c) for c in content_ids.split(',')]
+    all_segments = GpArray.initFromCatalog(dbconn.DbURL()).getDbList()
+    segments = filter(lambda seg: seg.getSegmentRole() == ROLE_MIRROR and
+                                  seg.content in content_list, all_segments)
+    for seg in segments:
+        segHost = seg.getSegmentHostName()
+        segDir =  seg.getSegmentDataDirectory()
+        command = 'ssh {} "chmod -R {} {}"'.format(segHost, mode, segDir)
+        run_command(context, command)
+
 @given("the mode of all the created data directories is changed to 0700")
 @when("the mode of all the created data directories is changed to 0700")
 @then("the mode of all the created data directories is changed to 0700")

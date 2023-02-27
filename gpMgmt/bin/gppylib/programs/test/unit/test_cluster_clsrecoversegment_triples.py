@@ -10,7 +10,7 @@ import tempfile
 import gppylib
 from gparray import Segment, GpArray
 from gppylib.programs.clsRecoverSegment_triples import RecoveryTripletsUserConfigFile, RecoveryTripletsFactory, \
-    RecoveryTriplet, get_segments_with_running_basebackup, is_pg_rewind_running
+    RecoveryTriplet, get_segments_with_running_basebackup, is_pg_rewind_running, is_backup_in_progress
 from test.unit.gp_unittest import GpTestCase, FakeCursor
 
 
@@ -32,6 +32,7 @@ class RecoveryTripletsFactoryTestCase(GpTestCase):
             f.flush()
             return self._run_single_FromGpArray_test(test["gparray"], f.name, None, test.get("unreachable_hosts"),
                                                      test.get("is_pgrewind_running", itertools.repeat(False)),
+                                                     test.get("is_backup_in_progress", itertools.repeat(False)),
                                                      test.get("segments_with_running_basebackup", set()),
                                                      test.get("unreachable_existing_hosts"))
 
@@ -39,6 +40,7 @@ class RecoveryTripletsFactoryTestCase(GpTestCase):
         return self._run_single_FromGpArray_test(test["gparray"], None, test["new_hosts"],
                                                  test.get("unreachable_hosts"),
                                                  test.get("is_pgrewind_running", itertools.repeat(False)),
+                                                 test.get("is_backup_in_progress", itertools.repeat(False)),
                                                  test.get("segments_with_running_basebackup", set()),
                                                  test.get("unreachable_existing_hosts"))
 
@@ -708,12 +710,13 @@ class RecoveryTripletsFactoryTestCase(GpTestCase):
                                   5|3|p|p|s|u|sdw2|sdw2|20001|/primary/gpseg3'''
 
     def _run_single_FromGpArray_test(self, gparray_str, config_file, new_hosts, unreachable_hosts, is_pgrewind_running,
-                                     segments_with_running_basebackup, unreachable_existing_hosts=None):
+                                     is_backup_in_progress,segments_with_running_basebackup, unreachable_existing_hosts=None):
         unreachable_hosts = unreachable_hosts if unreachable_hosts else []
         gppylib.programs.clsRecoverSegment_triples.get_unreachable_segment_hosts = Mock(return_value=unreachable_hosts)
         gppylib.programs.clsRecoverSegment_triples.get_segments_with_running_basebackup = Mock(
             return_value=segments_with_running_basebackup)
         gppylib.programs.clsRecoverSegment_triples.is_pg_rewind_running = Mock(side_effect=is_pgrewind_running)
+        gppylib.programs.clsRecoverSegment_triples.is_backup_in_progress = Mock(side_effect=is_backup_in_progress)
 
         initial_gparray = self.get_gp_array(gparray_str, unreachable_existing_hosts)
         mutated_gparray = self.get_gp_array(gparray_str, unreachable_existing_hosts)

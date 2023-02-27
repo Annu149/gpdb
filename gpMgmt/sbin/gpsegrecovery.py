@@ -104,6 +104,7 @@ class DifferentialRecovery(Command):
             if self.replication_slot.slot_exists():
                 self.replication_slot.drop_slot()
 
+            """ start backup with label differential_backup """
             self.pg_start_backup()
 
             """create replication slot pg_create_physical_replication_slot('internal_wal_replication_slot', true, 
@@ -116,6 +117,7 @@ class DifferentialRecovery(Command):
             """ rsync tablespace directories which are out of pg-data-directory """
             self.sync_tablespaces()
 
+            """ stop backup and remove created label """
             self.pg_stop_backup()
 
             """ Write the postresql.auto.conf and internal.auto.conf files """

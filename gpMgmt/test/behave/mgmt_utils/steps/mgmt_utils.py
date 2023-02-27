@@ -473,7 +473,7 @@ def impl(context, logdir):
                 recovery_type, dbid, progress = line.strip().split(':', 2)
                 progress_pattern = re.compile(get_recovery_progress_pattern(recovery_type))
                 # TODO: assert progress line in the actual hosts bb/rewind progress file
-                if re.search(progress_pattern, progress) and dbid.isdigit() and recovery_type in ['full', 'incremental']:
+                if re.search(progress_pattern, progress) and dbid.isdigit() and recovery_type in ['full', 'differential', 'incremental']:
                     return
                 else:
                     raise Exception('File present but incorrect format line "{}"'.format(line))
@@ -505,7 +505,13 @@ def impl(context, logdir):
         seg_dbid = seg.getSegmentDbId()
         if seg_dbid in all_progress_lines_by_dbid:
             recovery_type, line_from_combined_progress_file = all_progress_lines_by_dbid[seg_dbid]
-            process_name = 'pg_basebackup' if recovery_type == 'full' else 'pg_rewind'
+            if recovery_type == "full":
+                process_name = 'pg_basebackup'
+            elif recovery_type == "differential":
+                process_name = 'rsync'
+            else:
+                process_name = 'pg_rewind'
+
             seg_progress_file = '{}/{}.*.dbid{}.out'.format(log_dir, process_name, seg_dbid)
             check_cmd_str = 'grep "{}" {}'.format(line_from_combined_progress_file, seg_progress_file)
             check_cmd = Command(name='check line in segment progress file',
@@ -4017,35 +4023,42 @@ def impl(context, contentids):
         except:
             raise Exception("Could not find expected warning message for content {} in stdout".format(primary.content))
 
-@given('the user creates {num} number of files of {size} size(in MB) on primary on content {content}')
-@when('the user creates {num} number of files of {size} size(in MB) on primary on content {content}')
-def impl(context, num, size, content ):
+@given('the user creates {num} number of files of {size} size(in MB) on primary on content {contentids}')
+@when('the user creates {num} number of files of {size} size(in MB) on primary on content {contentids}')
+@then('the user creates {num} number of files of {size} size(in MB) on primary on content {contentids}')
+def impl(context, num, size, contentids ):
+
     gparray = GpArray.initFromCatalog(dbconn.DbURL())
-    segments = gparray.getDbList()
+    segments_pairs = gparray.segmentPairs
+    content_ids = [int(i) for i in contentids.split(',')]
+
     context.tempHostToFile = defaultdict(list)
 
-    for seg in segments:
-        if seg.content == int(content) and seg.role == 'p':
-            hostname = seg.getSegmentHostName()
-            datadir = seg.getSegmentDataDirectory()
-            break
+    for segpair in segments_pairs:
+        primary = segpair.primaryDB
+        mirror = segpair.mirrorDB
 
-    context.tempHostToFile[hostname].append(datadir)
-
-    for i in range(int(num)):
-        outfile = os.path.join(datadir,"testfile{}.txt".format(i))
-        cmd = Command(name="create file",
-                      cmdStr="dd if=/dev/zero of={} bs=1M count={}".format(outfile, size),
-                      remoteHost=hostname, ctxt=REMOTE)
-        cmd.run(validateAfter=True)
+        if primary.content in content_ids:
+            hostname = primary.getSegmentHostName()
+            datadir = primary.getSegmentDataDirectory()
+            mirror_hostname = mirror.getSegmentHostName()
+            mirror_datadir = mirror.getSegmentDataDirectory()
+            context.tempHostToFile[hostname].append(datadir)
+            context.tempHostToFile[mirror_hostname].append(mirror_datadir)
+            for i in range(int(num)):
+                outfile = os.path.join(datadir,"testfile{}.txt".format(i))
+                cmd = Command(name="create file",
+                              cmdStr="dd if=/dev/zero of={} bs=1M count={}".format(outfile, size),
+                              remoteHost=hostname, ctxt=REMOTE)
+                cmd.run(validateAfter=True)
 
 @given('the user remove created temp files')
 @when('the user remove created temp files')
 @then('the user remove created temp files')
 def impl(context):
-
     for host, datadir in context.tempHostToFile.items():
         cmd = Command(name="delete file",
                       cmdStr="rm -rf {}/testfile*.txt".format(datadir),
                       remoteHost=host, ctxt=REMOTE)
         cmd.run(validateAfter=True)
+

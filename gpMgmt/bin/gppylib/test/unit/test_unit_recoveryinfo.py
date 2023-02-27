@@ -465,7 +465,7 @@ class RecoveryResultTestCase(GpTestCase):
                 self.assertEqual(r.recovery_successful(), test["recovery_successful"])
 
                 if run_recovery:
-                    r.print_bb_rewind_update_and_start_errors()
+                    r.print_bb_rewind_differential_update_and_start_errors()
                 else:
                     r.print_setup_recovery_errors()
 
