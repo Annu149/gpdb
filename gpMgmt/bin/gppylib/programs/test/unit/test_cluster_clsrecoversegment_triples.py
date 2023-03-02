@@ -459,6 +459,49 @@ class RecoveryTripletsFactoryTestCase(GpTestCase):
                                            '8|2|p|m|s|u|sdw3|sdw3|21000|/mirror/gpseg2',
                                            None)]
             },
+            {
+                "name": "one_failed_segments_has_running_backup",
+                "gparray": self.three_failedover_segs_gparray_str,
+                "new_hosts": [],
+                "is_backup_in_progress": [True, False, False],
+                "expected": [self._triplet('3|1|m|p|s|d|sdw1|sdw1|20001|/primary/gpseg1',
+                                           '7|1|p|m|s|u|sdw2|sdw2|21001|/mirror/gpseg1',
+                                           None),
+                             self._triplet('4|2|m|p|s|d|sdw2|sdw2|20000|/primary/gpseg2',
+                                           '8|2|p|m|s|u|sdw3|sdw3|21000|/mirror/gpseg2',
+                                           None)]
+            },
+            {
+                "name": "some_failed_segments_have_running_backup",
+                "gparray": self.three_failedover_segs_gparray_str,
+                "new_hosts": [],
+                "is_backup_in_progress": [True, False, True],
+                "expected": [self._triplet('3|1|m|p|s|d|sdw1|sdw1|20001|/primary/gpseg1',
+                                           '7|1|p|m|s|u|sdw2|sdw2|21001|/mirror/gpseg1',
+                                           None)]
+            },
+            {
+                "name": "all_failed_segments_have_running_backup",
+                "gparray": self.three_failedover_segs_gparray_str,
+                "new_hosts": [],
+                "is_backup_in_progress": [True, True, True],
+                "expected": []
+            },
+            {
+                "name": "no_failed_segment_has_running_backup",
+                "gparray": self.three_failedover_segs_gparray_str,
+                "new_hosts": [],
+                "is_backup_in_progress": [False, False, False],
+                "expected": [self._triplet('2|0|m|p|s|d|sdw1|sdw1|20000|/primary/gpseg0',
+                                           '6|0|p|m|s|u|sdw2|sdw2|21000|/mirror/gpseg0',
+                                           None),
+                             self._triplet('3|1|m|p|s|d|sdw1|sdw1|20001|/primary/gpseg1',
+                                           '7|1|p|m|s|u|sdw2|sdw2|21001|/mirror/gpseg1',
+                                           None),
+                             self._triplet('4|2|m|p|s|d|sdw2|sdw2|20000|/primary/gpseg2',
+                                           '8|2|p|m|s|u|sdw3|sdw3|21000|/mirror/gpseg2',
+                                           None)]
+            },
         ]
 
         self.run_pass_tests(tests, self.run_single_GpArray_test)
@@ -646,6 +689,37 @@ class RecoveryTripletsFactoryTestCase(GpTestCase):
         self.assertEqual([call("Checking for running instances of pg_rewind with host sdw1 and port 6001 as source "
                                "server")], self.mock_logger.debug.call_args_list)
         self.assertEqual(is_pgrewind_running, False)
+
+    @patch('gppylib.db.dbconn.connect', side_effect=Exception())
+    def test_is_backup_in_progress_conn_exception(self, mock1):
+        with self.assertRaises(Exception) as ex:
+            is_backup_in_progress("sdw1", 6001)
+        self.assertEqual('Failed to query pg_is_in_backup() for segment with hostname sdw1, port 6001, error: ',
+                         str(ex.exception))
+
+    @patch('gppylib.db.dbconn.connect', autospec=True)
+    @patch('gppylib.db.dbconn.query', side_effect=Exception())
+    def test_is_backup_in_progress_query_exception(self, mock1, mock2):
+        with self.assertRaises(Exception) as ex:
+            is_backup_in_progress("sdw1", 6001)
+        self.assertEqual('Failed to query pg_is_in_backup() for segment with hostname sdw1, port 6001, error: ',
+                         str(ex.exception))
+
+    @patch('gppylib.db.dbconn.connect', autospec=True)
+    @patch('gppylib.db.dbconn.query', return_value=FakeCursor(my_list=[[True]]))
+    def test_is_backup_in_progress_returns_true(self, mock1, mock2):
+        backup_in_progress = is_backup_in_progress("sdw1", 6001)
+        self.assertEqual([call("Checking if backup is already in progress for the source server with host sdw1 and "
+                               "port 6001")], self.mock_logger.debug.call_args_list)
+        self.assertEqual(backup_in_progress, True)
+
+    @patch('gppylib.db.dbconn.connect', autospec=True)
+    @patch('gppylib.db.dbconn.query', return_value=FakeCursor(my_list=[[False]]))
+    def test_is_backup_in_progress_returns_false(self, mock1, mock2):
+        backup_in_progress = is_backup_in_progress("sdw1", 6001)
+        self.assertEqual([call("Checking if backup is already in progress for the source server with host sdw1 and "
+                               "port 6001")], self.mock_logger.debug.call_args_list)
+        self.assertEqual(backup_in_progress, False)
 
     def __init__(self, arg):
         super().__init__(arg)
