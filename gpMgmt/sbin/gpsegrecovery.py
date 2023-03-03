@@ -94,7 +94,7 @@ class DifferentialRecovery(Command):
 
     @set_recovery_cmd_results
     def run(self):
-        try:
+       try:
             self.logger.info("Running differential recovery with progress output temporarily in {}".format(
                 self.recovery_info.progress_file))
             self.error_type = RecoveryErrorType.SYNC_ERROR
@@ -107,9 +107,10 @@ class DifferentialRecovery(Command):
             """ start backup with label differential_backup """
             self.pg_start_backup()
 
-            """create replication slot pg_create_physical_replication_slot('internal_wal_replication_slot', true, 
+            """create replication slot pg_create_physical_replication_slot('internal_wal_replication_slot', true,
             false) """
-            self.replication_slot.create_slot()
+            if not self.replication_slot.create_slot():
+                raise Exception("Failed to create replication slot")
 
             """ rsync pg_data and tablespace directories including all the WAL files """
             self.sync_pg_data()
@@ -136,9 +137,8 @@ class DifferentialRecovery(Command):
             self.error_type = RecoveryErrorType.START_ERROR
             start_segment(self.recovery_info, self.logger, self.era)
 
-        except Exception as e:
-            self.cleanup()
-            exit(1)
+       except Exception as e:
+             self.cleanup()
 
     def sync_pg_data(self):
         self.logger.debug('Syncing pg_data of dbid {}'.format(self.recovery_info.target_segment_dbid))
@@ -181,17 +181,21 @@ class DifferentialRecovery(Command):
                                            self.recovery_info.source_port)
             query_cmd.run()
         except Exception as e:
-            raise Exception("Backup is already in progress for segment with host {} and port {}. Stop backup and "
-                            "then run gprecoverseg".format(self.recovery_info.source_hostname,
+            raise Exception("Failed to query pg_start_backup() for segment with host {} and port {}".format(self.recovery_info.source_hostname,
                                                            self.recovery_info.source_port))
         self.logger.debug("Successfully started backup for host {}, port {}".
                           format(self.recovery_info.source_hostname, self.recovery_info.source_port))
 
     def pg_stop_backup(self):
         sql = "SELECT pg_stop_backup();"
-        query_cmd = RemoteQueryCommand("Stop backup", sql, self.recovery_info.source_hostname,
+        try:
+            query_cmd = RemoteQueryCommand("Stop backup", sql, self.recovery_info.source_hostname,
                                        self.recovery_info.source_port)
-        query_cmd.run()
+            query_cmd.run()
+        except Exception as e:
+            raise Exception("Failed to query pg_stop_backup() for segment with host {} and port {}".
+                            format(self.recovery_info.source_hostname,self.recovery_info.source_port))
+
         self.logger.debug("Successfully stopped backup for host {}, port {}".
                           format(self.recovery_info.source_hostname, self.recovery_info.source_port))
 
@@ -205,7 +209,7 @@ class DifferentialRecovery(Command):
                            writeconffilesonly=True,
                            target_gp_dbid=self.recovery_info.target_segment_dbid,
                            recovery_mode=False)
-        self.logger.info("Running pg_basebackup to only write configuration files")
+        self.logger.debug("Running pg_basebackup to only write configuration files")
         cmd.run(validateAfter=True)
 
     def sync_wals_and_control_file(self):
@@ -225,9 +229,14 @@ class DifferentialRecovery(Command):
     def get_segment_tablespace_locations(self):
         sql = "SELECT tblspc_loc FROM ( SELECT oid FROM pg_tablespace WHERE spcname NOT IN " \
               "('pg_default', 'pg_global')) AS q,LATERAL gp_tablespace_location(q.oid);"
-        query = RemoteQueryCommand("Get tablespace locations", sql, self.recovery_info.source_hostname,
-                                   self.recovery_info.source_port)
-        query.run()
+        try:
+            query = RemoteQueryCommand("Get tablespace locations", sql, self.recovery_info.source_hostname,
+                                       self.recovery_info.source_port)
+            query.run()
+        except Exception as e:
+            raise Exception("Failed to get segment tablespace locations for segment with host {} and port {}".format(
+                self.recovery_info.source_hostname,self.recovery_info.source_port))
+
         self.logger.debug("Successfully got tablespace locations for segment with host {}, port {}".
                           format(self.recovery_info.source_hostname, self.recovery_info.source_port))
         return query.get_results()

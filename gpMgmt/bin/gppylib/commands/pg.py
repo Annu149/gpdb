@@ -208,7 +208,7 @@ class PgReplicationSlot:
             with closing(dbconn.connect(dburl, utility=True, encoding='UTF8')) as conn:
                 dbconn.query(conn, sql)
         except DatabaseError as e:
-            # one of the case cane be where slot is present but currently in active state
+            # one of the case can be where slot is present but currently in active state
             logger.exception("Failed to query pg_drop_replication_slot for host:{}, port:{}: {}".
                              format(self.host, self.port, str(e)))
             return False
@@ -231,12 +231,14 @@ class PgReplicationSlot:
         except DatabaseError as e:
             logger.exception("Failed to query pg_create_physical_replication_slot for host:{}, port:{}: {}".
                              format(self.host, self.port, str(e)))
+            return False
         except Exception as ex:
             raise Exception("Failed to create replication slot for host:{}, port:{} : {}".
                             format(self.host, self.port, str(ex)))
 
         logger.debug("Successfully created replication slot {} for host:{}, port:{}".
                      format(self.name, self.host, self.port))
+        return True
 
 
 class PgControlData(Command):

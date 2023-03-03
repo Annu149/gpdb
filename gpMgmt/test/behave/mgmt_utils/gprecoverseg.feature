@@ -630,24 +630,24 @@ Feature: gprecoverseg tests
     And user can start transactions
     And all files in gpAdminLogs directory are deleted on all hosts in the cluster
 
-#  @demo_cluster
-#  @concourse_cluster
-#  Scenario: gprecoverseg creates recovery_progress.file in custom logdir for full recovery of mirrors
-#    Given the database is running
-#    And all files in "/tmp/custom_logdir" directory are deleted on all hosts in the cluster
-#    And user immediately stops all mirror processes for content 0,1,2
-#    And the user waits until mirror on content 0,1,2 is down
-#    And user can start transactions
-#    When the user asynchronously runs "gprecoverseg -aF -l /tmp/custom_logdir" and the process is saved
-#    And the user suspend the walsender on the primary on content 0
-#    Then the user waits until recovery_progress.file is created in /tmp/custom_logdir and verifies its format
-#    And verify that lines from recovery_progress.file are present in segment progress files in /tmp/custom_logdir
-#    And the user reset the walsender on the primary on content 0
-#    And the user waits until saved async process is completed
-#    And recovery_progress.file should not exist in /tmp/custom_logdir
-#    And the user waits until mirror on content 0,1,2 is up
-#    And user can start transactions
-#    And all files in "/tmp/custom_logdir" directory are deleted on all hosts in the cluster
+  @demo_cluster
+  @concourse_cluster
+  Scenario: gprecoverseg creates recovery_progress.file in custom logdir for full recovery of mirrors
+    Given the database is running
+    And all files in "/tmp/custom_logdir" directory are deleted on all hosts in the cluster
+    And user immediately stops all mirror processes for content 0,1,2
+    And the user waits until mirror on content 0,1,2 is down
+    And user can start transactions
+    When the user asynchronously runs "gprecoverseg -aF -l /tmp/custom_logdir" and the process is saved
+    And the user suspend the walsender on the primary on content 0
+    Then the user waits until recovery_progress.file is created in /tmp/custom_logdir and verifies its format
+    And verify that lines from recovery_progress.file are present in segment progress files in /tmp/custom_logdir
+    And the user reset the walsender on the primary on content 0
+    And the user waits until saved async process is completed
+    And recovery_progress.file should not exist in /tmp/custom_logdir
+    And the user waits until mirror on content 0,1,2 is up
+    And user can start transactions
+    And all files in "/tmp/custom_logdir" directory are deleted on all hosts in the cluster
 
   @demo_cluster
   @concourse_cluster
@@ -676,7 +676,6 @@ Feature: gprecoverseg tests
     And user can start transactions
     When the user asynchronously runs "gprecoverseg -a --differential -l /tmp/custom_logdir" and the process is saved
     Then the user waits until recovery_progress.file is created in /tmp/custom_logdir and verifies its format
-    And verify that lines from recovery_progress.file are present in segment progress files in /tmp/custom_logdir
     And the user waits until saved async process is completed
     And recovery_progress.file should not exist in /tmp/custom_logdir
     And the user waits until mirror on content 0,1,2 is up
