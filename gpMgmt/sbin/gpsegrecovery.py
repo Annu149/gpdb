@@ -223,7 +223,8 @@ class DifferentialRecovery(Command):
         cmd.run(validateAfter=True)
 
     def get_segment_tablespace_locations(self):
-        sql = "SELECT tblspc_loc FROM ( SELECT oid FROM pg_tablespace WHERE spcname NOT IN " \
+        """"""
+        sql = "SELECT distinct(tblspc_loc) FROM ( SELECT oid FROM pg_tablespace WHERE spcname NOT IN " \
               "('pg_default', 'pg_global')) AS q,LATERAL gp_tablespace_location(q.oid);"
         query = RemoteQueryCommand("Get tablespace locations", sql, self.recovery_info.source_hostname,
                                    self.recovery_info.source_port)

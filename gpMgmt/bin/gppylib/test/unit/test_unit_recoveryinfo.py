@@ -42,13 +42,16 @@ class BuildRecoveryInfoTestCase(GpTestCase):
         # Each recoveryInfo object holds source_host (live segment), but not the target_host.
         tests = [
             {
-                "name": "single_target_host_suggest_full_and_incr",
+                "name": "single_target_host_suggest_full_and_incr_and_differential",
                 "mirrors_to_build": [GpMirrorToBuild(self.m3, self.p3, None, True, False),
-                                     GpMirrorToBuild(self.m4, self.p4, None, False, False)],
+                                     GpMirrorToBuild(self.m4, self.p4, None, False, False),
+                                     GpMirrorToBuild(self.m3, self.p3, None, False, True)],
                 "expected": {'sdw3': [RecoveryInfo('/data/mirror3', 7000, 7, 'sdw2', 3000, '/data/primary3',
                                                     True, False, '/tmp/logdir/pg_basebackup.111.dbid7.out'),
                                       RecoveryInfo('/data/mirror4', 8000, 8, 'sdw3', 4000, '/data/primary4',
-                                                    False, False, '/tmp/logdir/pg_rewind.111.dbid8.out')]}
+                                                    False, False, '/tmp/logdir/pg_rewind.111.dbid8.out'),
+                                      RecoveryInfo('/data/mirror3', 7000, 7, 'sdw2', 3000, '/data/primary3',
+                                                    False, True, '/tmp/logdir/rsync.111.dbid7.out')]}
             },
             {
                 "name": "single_target_hosts_suggest_full_and_incr_with_failover",
@@ -69,16 +72,28 @@ class BuildRecoveryInfoTestCase(GpTestCase):
                                                     True, False, '/tmp/logdir/pg_basebackup.111.dbid6.out')]}
             },
             {
-                "name": "multiple_target_hosts_suggest_full_and_incr",
+                "name": "multiple_target_hosts_suggest_differential",
+                "mirrors_to_build": [GpMirrorToBuild(self.m1, self.p1, None, False, True),
+                                     GpMirrorToBuild(self.m2, self.p2, None, False, True)],
+                "expected": {'sdw2': [RecoveryInfo('/data/mirror1', 5000, 5, 'sdw1', 1000, '/data/primary1',
+                                                   False, True, '/tmp/logdir/rsync.111.dbid5.out')],
+                             'sdw1': [RecoveryInfo('/data/mirror2', 6000, 6, 'sdw2', 2000, '/data/primary2',
+                                                   False, True, '/tmp/logdir/rsync.111.dbid6.out')]}
+            },
+            {
+                "name": "multiple_target_hosts_suggest_full_and_incr_and_differential",
                 "mirrors_to_build": [GpMirrorToBuild(self.m1, self.p1, None, True, False),
                                      GpMirrorToBuild(self.m3, self.p3, None, False, False),
-                                     GpMirrorToBuild(self.m4, self.p4, None, True, False)],
+                                     GpMirrorToBuild(self.m4, self.p4, None, True, False),
+                                     GpMirrorToBuild(self.m2, self.p2, None, False, True)],
                 "expected": {'sdw2': [RecoveryInfo('/data/mirror1', 5000, 5, 'sdw1', 1000, '/data/primary1',
                                                     True, False, '/tmp/logdir/pg_basebackup.111.dbid5.out')],
                              'sdw3': [RecoveryInfo('/data/mirror3', 7000, 7, 'sdw2', 3000, '/data/primary3',
                                                     False, False, '/tmp/logdir/pg_rewind.111.dbid7.out'),
                                       RecoveryInfo('/data/mirror4', 8000, 8, 'sdw3', 4000, '/data/primary4',
-                                                    True, False, '/tmp/logdir/pg_basebackup.111.dbid8.out')]}
+                                                    True, False, '/tmp/logdir/pg_basebackup.111.dbid8.out')],
+                             'sdw1': [RecoveryInfo('/data/mirror2', 6000, 6, 'sdw2', 2000, '/data/primary2',
+                                                   False, True, '/tmp/logdir/rsync.111.dbid6.out'),]}
             },
             {
                 "name": "multiple_target_hosts_suggest_incr_failover_same_as_failed",
@@ -297,20 +312,39 @@ class RecoveryResultTestCase(GpTestCase):
                 "dbids_that_failed_bb_rewind": [2, 3, 4]
             },
             {
-                "name": "run_recovery_all_dbids_fail_only_bb_rewind_errors",
+                "name": "run_recovery_all_dbids_fail_only_differential_errors",
+                "host1_error": '[{"error_type": "differential", "error_msg":"some error for dbid 2", "dbid": 2, "datadir": "/datadir2", "port": 7001, "progress_file": "/tmp/progress2"}, ' \
+                               '{"error_type": "differential", "error_msg":"some error for dbid 3", "dbid": 3, "datadir": "/datadir3", "port": 7003, "progress_file": "/tmp/progress3"}]',
+                "host2_error": '[{"error_type": "differential", "error_msg":"some error for dbid 4", "dbid": 4, "datadir": "/datadir4", "port": 7005, "progress_file": "/tmp/progress4"}]',
+                "expected_info_msgs": [call(Contains('-----')),
+                                       call(
+                                           'Failed to action_recover the following segments. You must run gprecoverseg -F for all differential failures'),
+                                       call(self._msg('host1', 7001, logfile='/tmp/progress2', type='differential')),
+                                       call(self._msg('host1', 7003, logfile='/tmp/progress3', type='differential')),
+                                       call(self._msg('host2', 7005, logfile='/tmp/progress4', type='differential'))],
+                "expected_error_msgs": [],
+                "setup_successful": True,
+                "full_recovery_successful": True,
+                "recovery_successful": False,
+                "dbids_that_failed_bb_rewind": [2, 3, 4]
+            },
+            {
+                "name": "run_recovery_all_dbids_fail_only_bb_rewind_differential_errors",
                 "host1_error": '[{"error_type": "full", "error_msg":"some error for dbid 2", "dbid": 2, "datadir": "/datadir2", "port": 7001, "progress_file": "/tmp/progress2"}, ' \
                               '{"error_type": "incremental", "error_msg":"some error for dbid 3", "dbid": 3, "datadir": "/datadir3", "port": 7003, "progress_file": "/tmp/progress3"}]',
-                "host2_error": '[{"error_type": "full", "error_msg":"some error for dbid 4", "dbid": 4, "datadir": "/datadir4", "port": 7005, "progress_file": "/tmp/progress4"}]',
+                "host2_error": '[{"error_type": "full", "error_msg":"some error for dbid 4", "dbid": 4, "datadir": "/datadir4", "port": 7005, "progress_file": "/tmp/progress4"},'
+                               '{"error_type": "differential", "error_msg":"some error for dbid 5", "dbid": 5, "datadir": "/datadir5", "port": 7006, "progress_file": "/tmp/progress5"}]',
                 "expected_info_msgs": [call(Contains('-----')),
                                        call(Contains('Failed to action_recover the following segments. You must run gprecoverseg -F for all incremental failures')),
                                        call(self._msg('host1', 7003, logfile='/tmp/progress3', type='incremental')),
+                                       call(self._msg('host2', 7006, logfile='/tmp/progress5', type='differential')),
                                        call(self._msg('host1', 7001, logfile='/tmp/progress2', type='full')),
                                        call(self._msg('host2', 7005, logfile='/tmp/progress4', type='full'))],
                 "expected_error_msgs": [],
                 "setup_successful": True,
                 "full_recovery_successful": False,
                 "recovery_successful": False,
-                "dbids_that_failed_bb_rewind": [2, 3, 4]
+                "dbids_that_failed_bb_rewind": [2, 3, 4, 5]
             },
             {
                 "name": "run_recovery_some_dbids_fail_only_bb_rewind_errors",
@@ -360,9 +394,11 @@ class RecoveryResultTestCase(GpTestCase):
                 "name": "run_recovery_all_dbids_fail_both_recovery_and_start_errors",
                 "host1_error": '[{"error_type": "full",  "error_msg":"some error for dbid 2", "dbid": 2, "datadir": "/datadir2", "port": 7001, "progress_file": "/tmp/progress2"}, ' \
                               '{"error_type": "start",  "error_msg":"some error for dbid 3", "dbid": 3, "datadir": "/datadir3", "port": 7003, "progress_file": "/tmp/progress3"}]',
-                "host2_error": '[{"error_type": "full",  "error_msg":"some error for dbid 4", "dbid": 4, "datadir": "/datadir4", "port": 7005, "progress_file": "/tmp/progress4"}]',
+                "host2_error": '[{"error_type": "full",  "error_msg":"some error for dbid 4", "dbid": 4, "datadir": "/datadir4", "port": 7005, "progress_file": "/tmp/progress4"},'
+                               '{"error_type": "differential", "error_msg":"some error for dbid 5", "dbid": 5, "datadir": "/datadir5", "port": 7006, "progress_file": "/tmp/progress5"}]',
                 "expected_info_msgs": [call(Contains('-----')),
                                        call(Contains('Failed to action_recover the following segments')),
+                                       call(self._msg('host2', 7006, logfile='/tmp/progress5', type='differential')),
                                        call(self._msg('host1', 7001, logfile='/tmp/progress2', type='full')),
                                        call(self._msg('host2', 7005, logfile='/tmp/progress4', type='full')),
                                        call(Contains('-----')),
@@ -372,7 +408,7 @@ class RecoveryResultTestCase(GpTestCase):
                 "setup_successful": True,
                 "full_recovery_successful": False,
                 "recovery_successful": False,
-                "dbids_that_failed_bb_rewind": [2, 4]
+                "dbids_that_failed_bb_rewind": [2, 4, 5]
             },
             {
                 "name": "run_recovery_all_dbids_fail_both_recovery_and_default_errors",
@@ -425,9 +461,11 @@ class RecoveryResultTestCase(GpTestCase):
                 "name": "run_recovery_some_dbids_fail_recovery_and_update_errors",
                 "host1_error": '[{"error_type": "full",  "error_msg":"some error for dbid 2", "dbid": 2, "datadir": "/datadir2", "port": 7001, "progress_file": "/tmp/progress2"}, ' \
                                '{"error_type": "default",  "error_msg":"some error for dbid 3", "dbid": 3, "datadir": "/datadir3", "port": 7003, "progress_file": "/tmp/progress3"}]',
-                "host2_error": '[{"error_type": "update", "error_msg":"some error for dbid 4", "dbid": 4, "datadir": "/datadir4", "port": 7005, "progress_file": "/tmp/progress4"}]',
+                "host2_error": '[{"error_type": "update", "error_msg":"some error for dbid 4", "dbid": 4, "datadir": "/datadir4", "port": 7005, "progress_file": "/tmp/progress4"},'
+                               '{"error_type": "differential", "error_msg":"some error for dbid 5", "dbid": 5, "datadir": "/datadir5", "port": 7006, "progress_file": "/tmp/progress5"}]',
                 "expected_info_msgs": [call(Contains('-----')),
                                        call(Contains('Failed to action_recover the following segments')),
+                                       call(self._msg('host2', 7006, logfile='/tmp/progress5', type='differential')),
                                        call(self._msg('host1', 7001, logfile='/tmp/progress2', type='full')),
                                        call(Contains('-----')),
                                        call(Contains('Did not start the following segments due to failure while updating the port.')),
@@ -436,7 +474,7 @@ class RecoveryResultTestCase(GpTestCase):
                 "setup_successful": True,
                 "full_recovery_successful": False,
                 "recovery_successful": False,
-                "dbids_that_failed_bb_rewind": [2]
+                "dbids_that_failed_bb_rewind": [2, 5]
             },
         ]
         self.run_tests(tests, run_recovery=True)
