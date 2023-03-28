@@ -14,6 +14,10 @@ use RewindTest;
 RewindTest::setup_cluster();
 RewindTest::start_master();
 RewindTest::create_standby();
-RewindTest::run_pg_rewind('local');
+local $ENV{'SUSPEND_PG_REWIND'}="1";
+command_like(
+	RewindTest::run_pg_rewind('local'),
+	qr/pg_rewind suspended/,
+	'pg_rewind gets suspended');
 RewindTest::clean_rewind_test();
 exit(0);
