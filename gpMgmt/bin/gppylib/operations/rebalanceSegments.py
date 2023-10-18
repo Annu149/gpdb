@@ -25,17 +25,18 @@ def replay_lag(primary_db):
     port = primary_db.getSegmentPort()
     host = primary_db.getSegmentHostName()
     logger.debug('Get replay lag on mirror of primary segment with host:{}, port:{}'.format(host, port))
-    sql = "select pg_wal_lsn_diff(flush_lsn, replay_lsn) from pg_stat_replication;"
+    sql = "select pg_wal_lsn_diff(flush_lsn, replay_lsn), flush_lsn, replay_lsn from pg_stat_replication;"
 
     try:
         dburl = dbconn.DbURL(hostname=host, port=port)
         with closing(dbconn.connect(dburl, utility=True, encoding='UTF8')) as conn:
-            replay_lag = dbconn.querySingleton(conn, sql)
+            res = dbconn.queryRow(conn, sql)
+            logger.info("lsn_diff {}, flush_lsn {}, replay_lsn {}".format(res[0], res[1], res[2]))
+
     except Exception as ex:
         raise Exception("Failed to query pg_stat_replication for host:{}, port:{}, error: {}".
                         format(host, port, str(ex)))
-    return replay_lag
-
+    return res[0]
 
 class ReconfigDetectionSQLQueryCommand(base.SQLCommand):
     """A distributed query that will cause the system to detect
