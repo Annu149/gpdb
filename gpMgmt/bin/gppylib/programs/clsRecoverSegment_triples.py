@@ -75,7 +75,7 @@ class RecoveryTriplet:
     Represents the segments needed to perform a recovery on a given segment.
     failed   = acting mirror that needs to be recovered
     live     = acting primary to use to recover that failed segment
-    failover = failed segment will be recovered here
+    failover = failed segment will be recovered here,
     """
     def __init__(self, failed: Segment, live: Segment, failover: Segment):
         self.failed = failed
