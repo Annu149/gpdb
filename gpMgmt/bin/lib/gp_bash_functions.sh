@@ -220,6 +220,9 @@ LOG_MSG () {
 		*FATAL*)
 			EXIT_STATUS=2
 			;;
+		*ERROR*)
+			EXIT_STATUS=1
+			;;
 		esac
 
 		if [ x"" == x"$DEBUG_LEVEL" ];then

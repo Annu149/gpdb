@@ -349,3 +349,12 @@ Feature: gpinitsystem tests
          #restore hosts file
          And restore /etc/hosts file and cleanup hostlist file
 
+    Scenario: gpinitsystem exits with status 1 when the user provides invalid option
+        Given create demo cluster config
+         When the user runs command "gpinitsystem -a -c ../gpAux/gpdemo/clusterConfigFile --ignore-warnings" eok
+         Then gpinitsystem should return a return code of 1
+          And gpinitsystem should print "Unknown option --ignore-warnings" to stdout
+        Given the user runs "gpstate"
+         Then gpstate should return a return code of 2
+
+
