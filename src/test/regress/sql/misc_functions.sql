@@ -125,3 +125,12 @@ SELECT * FROM tenk1 a JOIN my_gen_series(1,1000) g ON a.unique1 = g;
 
 EXPLAIN (COSTS OFF)
 SELECT * FROM tenk1 a JOIN my_gen_series(1,10) g ON a.unique1 = g;
+
+
+-- pg_split_walfile_name
+SELECT * FROM pg_split_walfile_name(NULL);
+SELECT * FROM pg_split_walfile_name('invalid');
+SELECT segment_number > 0 AS ok_segment_number, timeline_id
+FROM pg_split_walfile_name('000000010000000100000000');
+SELECT segment_number > 0 AS ok_segment_number, timeline_id
+FROM pg_split_walfile_name('ffffffFF00000001000000af');
