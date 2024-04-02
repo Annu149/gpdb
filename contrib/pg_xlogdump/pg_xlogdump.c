@@ -21,7 +21,9 @@
 #include "common/fe_memutils.h"
 #include "getopt_long.h"
 #include "rmgrdesc.h"
+#include "storage/fd.h"
 
+static XLogSegNo latestValidWalSegment(TimeLineID currentTLI);
 
 static const char *progname;
 
@@ -70,6 +72,35 @@ fatal_error(const char *fmt,...)
 
 	exit(EXIT_FAILURE);
 }
+
+/*
+ * Private function to reset the state, forgetting all decoded records, if we
+ * are asked to move to a new read position.
+ */
+// static void
+// ResetDecoder(XLogReaderState *state)
+// {
+//     DecodedXLogRecord *r;
+
+//     /* Reset the decoded record queue, freeing any oversized records. */
+//     while ((r = state->decode_queue_head) != NULL)
+//     {
+//         state->decode_queue_head = r->next;
+//         if (r->oversized)
+//             pfree(r);
+//     }
+//     state->decode_queue_tail = NULL;
+//     state->decode_queue_head = NULL;
+//     state->record = NULL;
+
+//     /* Reset the decode buffer to empty. */
+//     state->decode_buffer_tail = state->decode_buffer;
+//     state->decode_buffer_head = state->decode_buffer;
+
+//     /* Clear error state. */
+//     state->errormsg_buf[0] = '\0';
+// //    state->errormsg_deferred = false;
+// }
 
 static void
 print_rmgr_list(void)
@@ -428,6 +459,116 @@ usage(void)
 	printf("  -?, --help             show this help, then exit\n");
 }
 
+
+static XLogSegNo
+latestValidWalSegment(TimeLineID currentTLI)
+{
+    DIR		   *dir;
+    struct dirent *de;
+    XLogSegNo	startsegno = -1;
+    XLogSegNo	endsegno = -1;
+
+    /* Find the latest and earliest WAL segments in pg_wal */
+    dir = AllocateDir("pg_xlog");
+    while ((de = ReadDir(dir, "pg_xlog")) != NULL)
+    {
+        /* Does it look like a WAL segment? */
+        if (IsXLogFileName(de->d_name))
+        {
+            int			logSegNo;
+            int			tli;
+
+            XLogFromFileName(de->d_name, &tli, &logSegNo);
+            if (tli != currentTLI)
+            {
+                /*
+                 * We only want wal segment from current timeline.
+                 */
+                continue;
+            }
+            startsegno = (startsegno == -1) ? logSegNo : Min(startsegno, logSegNo);
+            endsegno = (endsegno == -1) ? logSegNo : Max(endsegno, logSegNo);
+        }
+    }
+    FreeDir(dir);
+
+	/*
+	* We should have at least one valid WAL segment in pg_wal. By this point,
+	* we must have read at the segment that included the checkpoint record we
+	* started replaying from.
+	*/
+    Assert(startsegno != -1 && endsegno != -1);
+
+    /* Find the latest valid WAL segment */
+    while (endsegno >= startsegno)
+    {
+        XLogReaderState *state;
+        XLogRecPtr	startptr;
+        char		xlogfname[MAXFNAMELEN];
+
+        //get the wal record pointer using the segno and offset
+        XLogSegNoOffsetToRecPtr(endsegno, 0, startptr);
+
+        //get the xlogfile name using the tli and endsegno
+        XLogFileName(xlogfname, currentTLI, endsegno);
+
+        XLogDumpPrivate private;
+        memset(&private, 0, sizeof(XLogDumpPrivate));
+        private.timeline = currentTLI;
+        private.startptr = startptr;
+        private.endptr = InvalidXLogRecPtr;
+        private.endptr_reached = false;
+
+		/*
+         * Allocate and initialize a new XLogReader.
+         *
+         * Returns NULL if the xlogreader couldn't be allocated.
+         */
+        state = XLogReaderAllocate( XLogDumpReadPage,&private);
+
+        //If failed to allocate XLOGReader then return error
+        if (!state)
+			fatal_error("Out of memory, failed while allocating a WAL reading processor.");
+
+        /*
+         * Read the first page of the current WAL segment and validate it by
+         * inspecting the page header.
+         */
+        Assert(!XLogRecPtrIsInvalid(startptr));
+
+        //TODO Need to compare XLogReaderState in both versions
+        // ResetDecoder(state);
+
+        /* Begin at the passed-in record pointer. */
+        state->EndRecPtr = startptr;
+        // state->NextRecPtr = startptr;
+        // state->ReadRecPtr = InvalidXLogRecPtr;
+        // state->DecodeRecPtr = InvalidXLogRecPtr;
+
+        //Read XLOG_BLCKSZ bytes from the walpage(from walfile of currentTLI) pointed by startptr and populate the readbuf with read bytes
+        XLogDumpReadPage(state, startptr, XLOG_BLCKSZ, startptr, state->readBuf, &currentTLI);
+
+        //Validate the PageHeader, if valid then our search for last valid wal file ends here.
+        if (XLogReaderValidatePageHeader(state, startptr, state->readBuf))
+        {
+            XLogReaderFree(state);
+            return endsegno;
+        }
+
+        XLogReaderFree(state);
+        endsegno--;
+    }
+
+	/*
+	* We should never reach here as we should have at least one valid WAL
+	* segment in pg_wal. By this point, we must have read at the segment that
+	* included the checkpoint record we started replaying from.
+	*/
+    // Assert(false);
+	return endsegno;
+}
+
+
 int
 main(int argc, char **argv)
 {
@@ -481,6 +622,9 @@ main(int argc, char **argv)
 		fprintf(stderr, "%s: no arguments specified\n", progname);
 		goto bad_argument;
 	}
+
+	fprintf(stdout,"Checking latest valid walsegment");
+	fprintf(stdout,"latestvalidwalsegment %lu", latestValidWalSegment(1));
 
 	while ((option = getopt_long(argc, argv, "be:?fn:p:r:s:t:Vx:",
 								 long_options, &optindex)) != -1)
