@@ -1,3 +1,5 @@
+import time
+
 from behave import given, when, then
 import os
 import re
@@ -53,6 +55,29 @@ def impl(context):
     check_stdout_msg_in_order(context, header_pattern)
 
     check_rows_exist(context)
+
+
+@then('wait till gpstate output looks like')
+def impl(context):
+    header_pattern = r'[ \t]+'.join(context.table.headings)
+    check_stdout_msg_in_order(context, header_pattern)
+
+    attempt = 0
+    num_retries = 300
+    while attempt < num_retries:
+        context.execute_steps(u'''
+                        When the user runs "gpstate -e"
+            ''')
+        try:
+            check_rows_exist(context)
+            break
+        except Exception as e:
+            attempt += 1
+            pass
+        time.sleep(2)
+
+    if attempt == num_retries:
+        raise Exception('Could not find matching string')
 
 @then('gpstate output contains "{recovery_types}" entries for mirrors of content {contents}')
 def impl(context, recovery_types, contents):

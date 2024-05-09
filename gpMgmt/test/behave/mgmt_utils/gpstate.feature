@@ -146,24 +146,6 @@ Feature: gpstate tests
         When the user runs "gpstate -e"
         Then gpstate should not print "Unsynchronized Segment Pairs" to stdout
 
-    Scenario: gpstate shows startup recovery remaining bytes when mirror is still starting up
-        Given a standard local demo cluster is running
-        And the primary on content 0 is stopped
-        And user can start transactions
-        And a process is started on host of mirror 0 which keeps running and contains temp walfile
-        When the user runs "gpstate -ev"
-        Then gpstate should print "Unsynchronized Segment Pairs" to stdout
-        And gpstate output looks like
-            | Current Primary | Port   | WAL sync remaining bytes            | Startup recovery remaining bytes | Mirror | Port   |
-            | \S+             | [0-9]+ | Not started yet                     | [0-9]+.*                         | \S+    | [0-9]+ |
-        And gpstate prints info message related to startup recovery to stdout
-        When the user asynchronously sets up to end that process in 1 seconds
-        And the user runs "gprecoverseg -a"
-        Then gprecoverseg should return a return code of 0
-        And gpstate should not print "Unsynchronized Segment Pairs" to stdout
-        And the segments are synchronized
-        And the cluster is rebalanced
-
     Scenario: gpstate -s logs show WAL remaining bytes when mirror hasn't flushed wal
         Given a standard local demo cluster is running
         And the user skips walreceiver flushing on the mirror on content 0
@@ -680,6 +662,108 @@ Feature: gpstate tests
         And all files in gpAdminLogs directory are deleted
         And the background pid is killed on "coordinator" segment
         And the gprecoverseg lock directory is removed
+
+    @demo_cluster
+    @concourse_cluster
+    @restore_recovery_min_apply_delay
+    Scenario: gpstate -e shows startup recovery remaining bytes correctly when mirror has replay lag
+        Given the database is running
+        And all the segments are running
+        And the segments are synchronized
+        And all files in gpAdminLogs directory are deleted on all hosts in the cluster
+        And recovery_min_apply_delay GUC value is updated to 240s
+        And the user suspend the replay on the mirror on content 0
+        And sql "DROP TABLE IF EXISTS test_recoverseg; CREATE TABLE test_recoverseg AS SELECT generate_series(1,1000000) AS a;" is executed in "postgres" db
+        And wal file is switched 2 times on primary 0
+        And user immediately stops all mirror processes for content 0
+        And user can start transactions
+        When the user asynchronously runs "gprecoverseg -av" and the process is saved
+        And the user runs "gpstate -e"
+        Then gpstate should print "Unsynchronized Segment Pairs" to stdout
+        And wait till gpstate output looks like
+            | Current Primary | Port   | WAL sync remaining bytes            | Startup recovery remaining bytes | Mirror | Port   |
+            | \S+             | [0-9]+ | Not started yet                     | [0-9]+.*                         | \S+    | [0-9]+ |
+        And gpstate prints info message related to startup recovery to stdout
+        And the user waits until saved async process is completed
+        And the user reset the replay on the mirror on content 0
+        And the cluster is rebalanced
+
+    @demo_cluster
+    @concourse_cluster
+    @restore_recovery_min_apply_delay
+    Scenario: gpstate -e shows startup recovery remaining bytes correctly when mirror is recovered using incremental recovery
+        Given the database is running
+        And all the segments are running
+        And the segments are synchronized
+        And all files in gpAdminLogs directory are deleted on all hosts in the cluster
+        And recovery_min_apply_delay GUC value is updated to 240s
+        And sql "DROP TABLE IF EXISTS test_recoverseg; CREATE TABLE test_recoverseg AS SELECT generate_series(1,1000000) AS a;" is executed in "postgres" db
+        And wal file is switched 2 times on primary 0
+        And wal file is switched 2 times on primary 1
+        And wal file is switched 2 times on primary 2
+        And user immediately stops all mirror processes for content 0,1,2
+        And user can start transactions
+        When the user asynchronously runs "gprecoverseg -a" and the process is saved
+        Then the user just waits until recovery_progress.file is created in gpAdminLogs
+        And verify that pg_rewind is not running for content 0,1,2
+        And the user runs "gpstate -e"
+        Then gpstate should print "Unsynchronized Segment Pairs" to stdout
+        And wait till gpstate output looks like
+            | Current Primary | Port   | WAL sync remaining bytes            | Startup recovery remaining bytes | Mirror | Port   |
+            | \S+             | [0-9]+ | Not started yet                     | [0-9]+.*                         | \S+    | [0-9]+ |
+            | \S+             | [0-9]+ | Not started yet                     | [0-9]+.*                         | \S+    | [0-9]+ |
+            | \S+             | [0-9]+ | Not started yet                     | [0-9]+.*                         | \S+    | [0-9]+ |
+        And gpstate prints info message related to startup recovery to stdout
+        And the user waits until saved async process is completed
+        And the cluster is rebalanced
+
+    @demo_cluster
+    @concourse_cluster
+    @restore_recovery_min_apply_delay
+    Scenario: gpstate -e shows startup recovery remaining bytes correctly when checkpoint is failing for long
+        Given the database is running
+        And all the segments are running
+        And the segments are synchronized
+        And all files in gpAdminLogs directory are deleted on all hosts in the cluster
+        And the user suspend the checkpoint on the primary on content 0,1
+        And recovery_min_apply_delay GUC value is updated to 240s
+        And sql "DROP TABLE IF EXISTS test_recoverseg; CREATE TABLE test_recoverseg AS SELECT generate_series(1,1000000) AS a;" is executed in "postgres" db
+        And user can start transactions
+        When the user immediately restarts primary 0,1
+        And the user runs "gpstate -e"
+        Then gpstate should print "Unsynchronized Segment Pairs" to stdout
+        And wait till gpstate output looks like
+            | Current Primary | Port   | WAL sync remaining bytes            | Startup recovery remaining bytes | Mirror | Port   |
+            | \S+             | [0-9]+ | Not started yet                     | [0-9]+.*                         | \S+    | [0-9]+ |
+            | \S+             | [0-9]+ | Not started yet                     | [0-9]+.*                         | \S+    | [0-9]+ |
+        And gpstate prints info message related to startup recovery to stdout
+        And the user reset the checkpoint on the primary on content 0,1
+
+    @demo_cluster
+    @concourse_cluster
+    @restore_recovery_min_apply_delay
+    Scenario: gpstate -e shows startup recovery remaining bytes correctly when data is loaded during pg_basebackup
+        Given the database is running
+        And all the segments are running
+        And the segments are synchronized
+        And all files in gpAdminLogs directory are deleted on all hosts in the cluster
+        And recovery_min_apply_delay GUC value is updated to 240s
+        And sql "DROP TABLE IF EXISTS test_recoverseg; CREATE TABLE test_recoverseg AS SELECT generate_series(1,1000000) AS a;" is executed in "postgres" db
+        And wal file is switched 3 times on primary 0
+        And user immediately stops all mirror processes for content 0
+        And user can start transactions
+        And the user suspend the walsender on the primary on content 0
+        When the user asynchronously runs "gprecoverseg -aF" and the process is saved
+        And sql "DROP TABLE IF EXISTS test_recoverseg; CREATE TABLE test_recoverseg AS SELECT generate_series(1,1000000) AS a;" is executed in "postgres" db
+        And the user runs "gpstate -e"
+        Then gpstate should print "Unsynchronized Segment Pairs" to stdout
+        And wait till gpstate output looks like
+            | Current Primary | Port   | WAL sync remaining bytes            | Startup recovery remaining bytes | Mirror | Port   |
+            | \S+             | [0-9]+ | Not started yet                     | [0-9]+.*                         | \S+    | [0-9]+ |
+        And gpstate prints info message related to startup recovery to stdout
+        And the user reset the walsender on the primary on content 0
+        And the user waits until saved async process is completed
+        And the cluster is rebalanced
 
 
 ########################### @concourse_cluster tests ###########################

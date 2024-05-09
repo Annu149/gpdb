@@ -389,10 +389,11 @@ def impl(context):
     execute_sql('postgres', inject_fault_query)
     return
 
-@given('the user {action} the walsender on the {segment} on content {content_ids}')
-@when('the user {action} the walsender on the {segment} on content {content_ids}')
-@then('the user {action} the walsender on the {segment} on content {content_ids}')
-def impl(context, action, segment, content_ids):
+
+@given('the user {action} the {fault_point} on the {segment} on content {content_ids}')
+@when('the user {action} the {fault_point} on the {segment} on content {content_ids}')
+@then('the user {action} the {fault_point} on the {segment} on content {content_ids}')
+def impl(context, action, fault_point, segment, content_ids):
     if segment == 'mirror':
         role = "'m'"
     elif segment == 'primary':
@@ -403,8 +404,32 @@ def impl(context, action, segment, content_ids):
     create_fault_query = "CREATE EXTENSION IF NOT EXISTS gp_inject_fault;"
     execute_sql('postgres', create_fault_query)
 
-    inject_fault_query = "SELECT gp_inject_fault_infinite('wal_sender_loop', '%s', dbid) FROM gp_segment_configuration WHERE content IN (%s) AND role=%s;" % (action, content_ids, role)
-    execute_sql('postgres', inject_fault_query)
+    if fault_point == "walsender":
+        inject_fault_query = "SELECT gp_inject_fault_infinite('wal_sender_loop', '%s', dbid) FROM gp_segment_configuration WHERE content IN (%s) AND role=%s;" % (action, content_ids, role)
+        execute_sql('postgres', inject_fault_query)
+
+    if fault_point == "checkpoint":
+        inject_fault_query = "SELECT gp_inject_fault_infinite('checkpoint', '%s', dbid) FROM gp_segment_configuration WHERE content IN (%s) AND role=%s;" % (
+        action, content_ids, role)
+        execute_sql('postgres', inject_fault_query)
+
+    if fault_point == "replay":
+        inject_fault_query = " select gp_inject_fault('after_xlog_redo_noop', '%s', dbid) FROM gp_segment_configuration WHERE content IN (%s) AND role=%s;" % (
+        action, content_ids, role)
+        execute_sql('postgres', inject_fault_query)
+        if action == "reset":
+            return
+
+        inject_fault_query1 = "select insert_noop_xlog_record();"
+        execute_sql('postgres', inject_fault_query1)
+
+        inject_fault_query2 = "select insert_noop_xlog_record() from gp_dist_random('gp_id');"
+        execute_sql('postgres', inject_fault_query2)
+
+        inject_fault_query3 = "select gp_wait_until_triggered_fault('after_xlog_redo_noop', 0, dbid) FROM gp_segment_configuration WHERE content IN (%s) AND role=%s;" % (
+        content_ids, role)
+        execute_sql('postgres', inject_fault_query3)
+
     return
 
 
@@ -4388,6 +4413,91 @@ def set_ic_proxy_and_address(context, new_addr):
 def step_impl(context):
     set_ic_proxy_and_address(context, "")
 
+
 @given(u'the cluster is running in IC proxy mode with new proxy address {address}')
 def step_impl(context, address):
     set_ic_proxy_and_address(context, address)
+
+
+@given('{guc_name} GUC value is updated to {guc_value}')
+@when('{guc_name} GUC value is updated to {guc_value}')
+@then('{guc_name} GUC value is updated to {guc_value}')
+def impl(context, guc_name, guc_value):
+    cmd = "gpconfig -s {}".format(guc_name, guc_value)
+    run_command(context, cmd)
+    if context.ret_code != 0:
+        raise Exception("cannot run %s: %s, stdout: %s" % (cmd, context.error_message, context.stdout_message))
+
+    old_value = context.stdout_message.split(":")[-1].strip()
+
+    if not hasattr(context, 'guc'):
+        context.guc = dict()
+    context.guc[guc_name] = old_value
+
+    cmd = "gpconfig -c {} -v {}".format(guc_name, guc_value)
+    run_command(context, cmd)
+    if context.ret_code != 0:
+        raise Exception("cannot run %s: %s, stdout: %s" % (cmd, context.error_message, context.stdout_message))
+
+    # let all config take effects
+    cmd = "gpstop -au"
+    run_command(context, cmd)
+    if context.ret_code != 0:
+        raise Exception("cannot run %s: %s, stdout: %s" % (cmd, context.error_message, context.stdout_message))
+
+
+@when('{guc_name} GUC value is restored')
+@then('{guc_name} GUC value is restored')
+def impl(context, guc_name):
+    if not hasattr(context, 'guc'):
+        raise Exception('{} can not be restored'.format(guc_name))
+
+    if guc_name not in context.guc:
+        raise Exception('{} can not be restored.'.format(guc_name))
+
+    cmd = "gpconfig -c {} -v {}".format(guc_name, context.guc[guc_name])
+    run_command(context, cmd)
+    if context.ret_code != 0:
+        raise Exception("cannot run %s: %s, stdout: %s" % (cmd, context.error_message, context.stdout_message))
+
+    # let all config take effects
+    cmd = "gpstop -au"
+    run_command(context, cmd)
+    if context.ret_code != 0:
+        raise Exception("cannot run %s: %s, stdout: %s" % (cmd, context.error_message, context.stdout_message))
+
+    del context.guc[guc_name]
+
+
+@given('wal file is switched {num} times on primary {content}')
+@then('wal file is switched {num} times on primary {content}')
+def impl(context, num, content):
+    host, port = get_primary_segment_host_port_for_content(content)
+    query = "select pg_switch_wal();"
+    db = "postgres"
+    psql_cmd = "PGDATABASE=\'%s\' PGOPTIONS=\'-c gp_role=utility\' psql -h %s -p %s -c \"%s\"; " % (
+        db, host, port, query)
+
+    for i in range(int(num)):
+        Command(name='Running Remote command: %s' % psql_cmd, cmdStr=psql_cmd).run(validateAfter=True)
+
+
+@given('the user immediately restarts{segment} {contentids}')
+@when('the user immediately restarts {segment} {contentids}')
+@then('the user immediately restarts {segment} {contentids}')
+def impl(context, segment, contentids):
+    role = ROLE_PRIMARY if segment=="primary" else ROLE_MIRROR
+    all_segments = GpArray.initFromCatalog(dbconn.DbURL()).getDbList()
+
+    segments = filter(lambda seg: seg.getSegmentPreferredRole() == role and
+                                  seg.getSegmentContentId() in [int(c) for c in contentids.split(',')], all_segments)
+
+    for seg in segments:
+        # For demo_cluster tests that run on the CI gives the error 'bash: pg_ctl: command not found'
+        # Thus, need to add pg_ctl to the path when ssh'ing to a demo cluster.
+        subprocess.check_call(['ssh', seg.getSegmentHostName(),
+                               'source %s/greenplum_path.sh && pg_ctl restart -D %s -m immediate' % (
+                                   pipes.quote(os.environ.get("GPHOME")), pipes.quote(seg.getSegmentDataDirectory()))
+                               ])
+
+

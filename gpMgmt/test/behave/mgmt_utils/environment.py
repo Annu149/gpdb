@@ -206,3 +206,24 @@ def after_scenario(context, scenario):
                           ctxt=REMOTE)
             cmd.run(validateAfter=True)
 
+    if "restore_recovery_min_apply_delay" in scenario.effective_tags:
+        if not hasattr(context, 'guc'):
+            raise Exception('{} can not be restored'.format("recovery_min_apply_delay"))
+
+        if "recovery_min_apply_delay" not in context.guc:
+            raise Exception('{} can not be restored.'.format("recovery_min_apply_delay"))
+
+        cmd = "gpconfig -c {} -v {}".format("recovery_min_apply_delay", context.guc["recovery_min_apply_delay"])
+        run_command(context, cmd)
+        if context.ret_code != 0:
+            raise Exception("cannot run %s: %s, stdout: %s" % (cmd, context.error_message, context.stdout_message))
+
+        # let all config take effects
+        cmd = "gpstop -au"
+        run_command(context, cmd)
+        if context.ret_code != 0:
+            raise Exception("cannot run %s: %s, stdout: %s" % (cmd, context.error_message, context.stdout_message))
+
+        del context.guc["recovery_min_apply_delay"]
+
+

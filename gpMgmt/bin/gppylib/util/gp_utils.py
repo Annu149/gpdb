@@ -47,32 +47,37 @@ def get_startup_recovery_remaining_bytes(hostname, port, datadir):
         logger.debug("Could not fetch startup recovery walfilename")
         return
 
-    # Get the 'Minimum recovery ending location' from mirror pg_controldata
-    cmd = PgControlData(name='run pg_controldata', datadir=datadir, ctxt=base.REMOTE, remoteHost=hostname)
-    cmd.run(validateAfter=False)
-    if cmd.get_return_code() != 0:
-        logger.debug("Could not fetch 'Minimum recovery ending location' from pg_controldata")
-        return
-    min_recovery_ending_location = cmd.get_value('Minimum recovery ending location')  # value can be possibly None?
-
     try:
         with closing(dbconn.connect(dbconn.DbURL())) as conn:
             wal_segment_size_bytes = dbconn.querySingleton(conn, "SELECT ps.setting::int FROM pg_show_all_settings() "
                                                                  "ps WHERE ps.name = 'wal_segment_size';")
-            min_recovery_ending_location_walfile = dbconn.querySingleton(conn, "select pg_walfile_name('{}')".format(min_recovery_ending_location))
     except Exception as e:
-        logger.debug("Failed to get either wal_segment_size or walfile_name of Minimum recovery ending location, "
+        logger.debug("Failed to get wal_segment_size, "
                      "err: {}".format(str(e)))
         return
 
     try:
-        current_walfile_bytes = split_walfile_name(recovery_walfile, wal_segment_size_bytes)[1]*wal_segment_size_bytes
-        final_walfile_bytes = split_walfile_name(min_recovery_ending_location_walfile, wal_segment_size_bytes)[1]*wal_segment_size_bytes
+        recovering_walfile_tli, recovering_walfile_segno = split_walfile_name(recovery_walfile, wal_segment_size_bytes)
     except Exception as e:
         logger.debug("Failed to split walfile_name, err: {}".format(str(e)))
         return
 
-    startup_recovery_remaining_bytes = final_walfile_bytes - current_walfile_bytes
+    # Get the last valid walfile name from pg_wal directory
+    cmd = Command(name='Get last valid walfile', cmdStr="pg_waldump -p  {}/pg_wal -t {} --last-valid-walname".format(datadir, int(recovering_walfile_tli)), ctxt=base.REMOTE, remoteHost=hostname)
+    cmd.run(validateAfter=False)
+    if cmd.get_return_code() != 0:
+        logger.debug("Could not fetch last valid walfile name")
+        return
+    last_valid_walfile = cmd.get_stdout().strip()
+
+    current_walfile_bytes = recovering_walfile_segno*wal_segment_size_bytes
+    try:
+        final_walfile_bytes = split_walfile_name(last_valid_walfile, wal_segment_size_bytes)[1]*wal_segment_size_bytes
+    except Exception as e:
+        logger.debug("Failed to split walfile_name, err: {}".format(str(e)))
+        return
+
+    startup_recovery_remaining_bytes = abs(final_walfile_bytes - current_walfile_bytes)
 
     return startup_recovery_remaining_bytes
 

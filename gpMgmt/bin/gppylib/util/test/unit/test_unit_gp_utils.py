@@ -18,7 +18,7 @@ class GpUtilsTestCase(GpTestCase):
             patch('gppylib.commands.gp.Command.__init__', return_value=None),
             patch('gppylib.commands.gp.Command.run', return_value=None),
             patch('gppylib.commands.gp.Command.get_return_code', return_value=0),
-            patch('gppylib.commands.gp.Command.get_stdout', return_value="000000030000052D0000000C"),
+            patch('gppylib.commands.gp.Command.get_stdout', side_effect=["000000030000052D0000000C", "0000000100000BAD00000025"]),
             patch('gppylib.commands.pg.PgControlData.run'),
             patch('gppylib.commands.pg.PgControlData.get_value', return_value="BAD/9698CA28"),
             patch('gppylib.db.dbconn.DbURL'),
@@ -39,20 +39,15 @@ class GpUtilsTestCase(GpTestCase):
         self.assertEqual(get_startup_recovery_remaining_bytes("sdw1", 7002, "/data/demo/1"), None)
         self.assertEqual([call("Could not fetch startup recovery walfilename")], self.mock_logger.debug.call_args_list)
 
-    @patch('gppylib.commands.pg.PgControlData.get_return_code', return_value=1)
-    def test_get_startup_recovery_remaining_bytes_pg_control_data_fails(self, mock):
-        get_startup_recovery_remaining_bytes("sdw1", 7002, "/data/demo/1")
-        self.assertEqual([call("Could not fetch 'Minimum recovery ending location' from pg_controldata")], self.mock_logger.debug.call_args_list)
-
     @patch('gppylib.db.dbconn.connect', side_effect=Exception('Error'))
     def test_get_startup_recovery_remaining_bytes_db_connect_raises_exception(self, mock):
         get_startup_recovery_remaining_bytes("sdw1", 7002, "/data/demo/1")
-        self.assertEqual([call("Failed to get either wal_segment_size or walfile_name of Minimum recovery ending location, err: Error")], self.mock_logger.debug.call_args_list)
+        self.assertEqual([call("Failed to get wal_segment_size, err: Error")], self.mock_logger.debug.call_args_list)
 
     @patch('gppylib.db.dbconn.querySingleton', side_effect=Exception('Error'))
     def test_get_startup_recovery_remaining_bytes_db_query_raises_exception(self, mock):
         get_startup_recovery_remaining_bytes("sdw1", 7002, "/data/demo/1")
-        self.assertEqual([call("Failed to get either wal_segment_size or walfile_name of Minimum recovery ending location, err: Error")], self.mock_logger.debug.call_args_list)
+        self.assertEqual([call("Failed to get wal_segment_size, err: Error")], self.mock_logger.debug.call_args_list)
 
     @patch('gppylib.util.gp_utils.split_walfile_name', side_effect=Exception('Error'))
     def test_get_startup_recovery_remaining_bytes_splitwalfilename_fails(self, mock):
@@ -60,7 +55,12 @@ class GpUtilsTestCase(GpTestCase):
         self.assertEqual([call("Failed to split walfile_name, err: Error")],
                          self.mock_logger.debug.call_args_list)
 
-    @patch('gppylib.db.dbconn.querySingleton', side_effect=[67108864, "0000000100000BAD00000025"])
+    @patch('gppylib.commands.gp.Command.get_return_code', side_effect=[0, 1])
+    def test_get_startup_recovery_pg_waldump_fails(self, mock):
+        self.assertEqual(get_startup_recovery_remaining_bytes("sdw1", 7002, "/data/demo/1"), None)
+        self.assertEqual([call("Could not fetch last valid walfile name")], self.mock_logger.debug.call_args_list)
+
+    @patch('gppylib.db.dbconn.querySingleton', side_effect=[67108864])
     def test_get_startup_recovery_remaining_bytes_succeeds(self, mock):
         self.assertEqual(get_startup_recovery_remaining_bytes("sdw1", 7002, "/data/demo/1"), 7148503302144)
 
