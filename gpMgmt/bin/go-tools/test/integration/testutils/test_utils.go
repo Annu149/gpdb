@@ -103,6 +103,15 @@ func RunStatus(params ...string) (CmdResult, error) {
 	return runCmd(genCmd)
 }
 
+func RunDelete(params ...string) (CmdResult, error) {
+	params = append([]string{"delete"}, params...)
+	genCmd := Command{
+		cmdStr: constants.DefaultServiceName,
+		args:   params,
+	}
+	return runCmd(genCmd)
+}
+
 func RunInitCluster(params ...string) (CmdResult, error) {
 	params = append([]string{"init", "cluster"}, params...)
 	genCmd := Command{
@@ -287,6 +296,22 @@ func DisableandDeleteServiceFiles(p utils.Platform) {
 		UnloadSvcFile(serviceCmd, filepath.Base(filePath))
 		_ = os.RemoveAll(filePath)
 	}
+}
+
+func DisableandDeleteHubServiceFile(p utils.Platform, serviceName string) {
+	serviceDir, serviceExt, serviceCmd := GetServiceDetails(p)
+	hubServiceFile := filepath.Join(serviceDir, fmt.Sprintf("%s.%s", serviceName, serviceExt))
+	fmt.Printf(hubServiceFile)
+	UnloadSvcFile(serviceCmd, hubServiceFile)
+	_ = os.RemoveAll(hubServiceFile)
+}
+
+func DisableandDeleteAgentServiceFile(p utils.Platform, serviceName string) {
+	serviceDir, serviceExt, serviceCmd := GetServiceDetails(p)
+	agentServiceFile := filepath.Join(serviceDir, fmt.Sprintf("%s.%s", serviceName, serviceExt))
+	fmt.Printf(agentServiceFile)
+	UnloadSvcFile(serviceCmd, agentServiceFile)
+	_ = os.RemoveAll(agentServiceFile)
 }
 
 func GetSvcFiles(svcDir string, svcExtention string) []string {

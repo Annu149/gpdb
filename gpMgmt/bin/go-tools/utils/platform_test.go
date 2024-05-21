@@ -34,12 +34,14 @@ func setMocks() {
 	utils.GpsyncCommand = nil
 	utils.LoadServiceCommand = nil
 	utils.UnloadServiceCommand = nil
+	utils.RemoveServiceCommand = nil
 }
 
 func resetMocks() {
 	utils.GpsyncCommand = exec.Command
 	utils.LoadServiceCommand = exec.Command
 	utils.UnloadServiceCommand = exec.Command
+	utils.RemoveServiceCommand = exec.Command
 }
 
 func TestCreateServiceDir(t *testing.T) {
@@ -525,6 +527,130 @@ func TestGetStartAgentCommandString(t *testing.T) {
 		expected := []string{"launchctl", "", "start", "gptest_agent"}
 		if !reflect.DeepEqual(result, expected) {
 			t.Fatalf("got %+v, want %+v", result, expected)
+		}
+	})
+}
+
+func TestRemoveHubService(t *testing.T) {
+	testhelper.SetupTestLogger()
+	t.Run("RemoveHubService fails to remove hub service", func(t *testing.T) {
+		platform := GetPlatform(constants.PlatformDarwin, t)
+
+		setMocks()
+		defer resetMocks()
+		utils.RemoveServiceCommand = exectest.NewCommand(exectest.Failure)
+
+		err := platform.RemoveHubService("gp", "/tmp/Launchagents")
+
+		expectedErr := "could not remove hub service gp_hub: exit status 1"
+		if err.Error() != expectedErr {
+			t.Fatalf("got %q, want %q", err, expectedErr)
+		}
+	})
+	t.Run("RemoveHubService successfully removes hub service", func(t *testing.T) {
+		platform := GetPlatform(constants.PlatformDarwin, t)
+
+		setMocks()
+		defer resetMocks()
+		utils.UnloadServiceCommand = exectest.NewCommand(exectest.Success)
+		utils.LoadServiceCommand = exectest.NewCommand(exectest.Success)
+		utils.RemoveServiceCommand = exectest.NewCommand(exectest.Success)
+
+		err := platform.RemoveHubService("gp", "/tmp/Launchagents")
+
+		if err != nil {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+}
+
+func TestRemoveAgentService(t *testing.T) {
+	testhelper.SetupTestLogger()
+	t.Run("RemoveAgentService fails to remove agent service", func(t *testing.T) {
+		platform := GetPlatform(constants.PlatformDarwin, t)
+
+		setMocks()
+		defer resetMocks()
+		utils.RemoveServiceCommand = exectest.NewCommand(exectest.Failure)
+
+		err := platform.RemoveAgentService("/usr/local/gpdb", "gp", "/tmp/Launchagents", []string{"-h", "host1"})
+
+		expectedErr := "could not remove agent service gp_agent on segment hosts: "
+		if err.Error() != expectedErr {
+			t.Fatalf("got %q, want %q", err, expectedErr)
+		}
+	})
+	t.Run("RemoveAgentService successfully removes agent service", func(t *testing.T) {
+		platform := GetPlatform(constants.PlatformDarwin, t)
+
+		setMocks()
+		defer resetMocks()
+		utils.UnloadServiceCommand = exectest.NewCommand(exectest.Success)
+		utils.LoadServiceCommand = exectest.NewCommand(exectest.Success)
+		utils.RemoveServiceCommand = exectest.NewCommand(exectest.Success)
+
+		err := platform.RemoveAgentService("/usr/local/gpdb", "gp", "/tmp/Launchagents", []string{"-h", "host1"})
+
+		if err != nil {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+}
+
+func TestRemoveHubServiceFile(t *testing.T) {
+	testhelper.SetupTestLogger()
+	t.Run("RemoveHubServiceFile fails to remove hub service file", func(t *testing.T) {
+		platform := GetPlatform(constants.PlatformDarwin, t)
+
+		utils.SetExecCommand(exectest.NewCommand(exectest.Failure))
+		defer utils.ResetExecCommand()
+
+		err := platform.RemoveHubServiceFile("gp", "/tmp/Launchagents")
+
+		expectedErr := "could not remove hub service file /tmp/Launchagents/gp_hub.plist: exit status 1"
+		if err.Error() != expectedErr {
+			t.Fatalf("got %q, want %q", err, expectedErr)
+		}
+	})
+	t.Run("RemoveHubServiceFile successfully removes hub service file", func(t *testing.T) {
+		platform := GetPlatform(constants.PlatformDarwin, t)
+
+		utils.SetExecCommand(exectest.NewCommand(exectest.Success))
+		defer utils.ResetExecCommand()
+
+		err := platform.RemoveHubServiceFile("gp", "/tmp/Launchagents")
+
+		if err != nil {
+			t.Fatalf("unexpected error: %#v", err)
+		}
+	})
+}
+
+func TestRemoveAgentServiceFile(t *testing.T) {
+	testhelper.SetupTestLogger()
+	t.Run("RemoveHubServiceFile fails to remove hub service file", func(t *testing.T) {
+		platform := GetPlatform(constants.PlatformLinux, t)
+
+		utils.SetExecCommand(exectest.NewCommand(exectest.Failure))
+		defer utils.ResetExecCommand()
+
+		err := platform.RemoveAgentServiceFile("/usr/local/gpdb", "gp", "/tmp/Launchagents", []string{"-h", "host1"})
+
+		expectedErr := "could not delete agent service file /tmp/Launchagents/gp_agent.service on hosts: exit status 1"
+		if err.Error() != expectedErr {
+			t.Fatalf("got %q, want %q", err, expectedErr)
+		}
+	})
+	t.Run("RemoveHubServiceFile successfully removes hub service file", func(t *testing.T) {
+		platform := GetPlatform(constants.PlatformLinux, t)
+
+		utils.SetExecCommand(exectest.NewCommand(exectest.Success))
+		defer utils.ResetExecCommand()
+
+		err := platform.RemoveAgentServiceFile("/usr/local/gpdb", "gp", "/tmp/Launchagents", []string{"-h", "host1"})
+
+		if err != nil {
+			t.Fatalf("unexpected error: %#v", err)
 		}
 	})
 }

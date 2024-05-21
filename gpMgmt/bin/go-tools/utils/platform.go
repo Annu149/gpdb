@@ -26,6 +26,7 @@ var (
 	GpsyncCommand        = exec.Command
 	LoadServiceCommand   = exec.Command
 	UnloadServiceCommand = exec.Command
+	RemoveServiceCommand = exec.Command
 )
 
 type GpPlatform struct {
@@ -70,6 +71,10 @@ type Platform interface {
 	CreateAndInstallHubServiceFile(gpHome string, serviceDir string, serviceName string) error
 	CreateAndInstallAgentServiceFile(hostnames []string, gpHome string, serviceDir string, serviceName string) error
 	GetStartHubCommand(serviceName string) *exec.Cmd
+	RemoveHubService(serviceName string, serviceDir string) error
+	RemoveAgentService(gpHome string, serviceName string, serviceDir string, hostList []string) error
+	RemoveHubServiceFile(serviceName string, serviceDir string) error
+	RemoveAgentServiceFile(gpHome string, serviceName string, serviceDir string, hostList []string) error
 	GetStartAgentCommandString(serviceName string) []string
 	GetServiceStatusMessage(serviceName string) (string, error)
 	ParseServiceStatusMessage(message string) idl.ServiceStatus
@@ -302,6 +307,89 @@ func (p GpPlatform) GetStartHubCommand(serviceName string) *exec.Cmd {
 
 func (p GpPlatform) GetStartAgentCommandString(serviceName string) []string {
 	return []string{p.ServiceCmd, p.UserArg, "start", fmt.Sprintf("%s_agent", serviceName)}
+}
+
+func (p GpPlatform) RemoveHubService(serviceName string, serviceDir string) error {
+	// Stop hub
+	if p.OS == constants.PlatformDarwin {
+		err := RemoveServiceCommand(p.ServiceCmd, "remove", fmt.Sprintf("%s_hub", serviceName)).Run()
+		if err != nil {
+			return fmt.Errorf("could not remove hub service %s: %w", fmt.Sprintf("%s_hub", serviceName), err)
+		}
+
+		return nil
+	}
+
+	err := RemoveServiceCommand(p.ServiceCmd, "disable", fmt.Sprintf("%s_hub", serviceName)).Run()
+	if err != nil {
+		return fmt.Errorf("could not remove hub service %s: %w", fmt.Sprintf("%s_hub", serviceName), err)
+	}
+
+	hubServiceFilePath := filepath.Join(serviceDir, fmt.Sprintf("%s_hub.%s", serviceName, p.ServiceExt))
+	err = p.ReloadHubService(hubServiceFilePath)
+	if err != nil {
+		return fmt.Errorf("could not remove hub service %s: %w", fmt.Sprintf("%s_hub", serviceName), err)
+	}
+
+	gplog.Info("Succesfully deleted hub service")
+
+	return nil
+}
+
+func (p GpPlatform) RemoveAgentService(gpHome string, serviceName string, serviceDir string, hostList []string) error {
+	// Stop agents
+
+	args := append(hostList, p.ServiceCmd)
+
+	if p.OS == constants.PlatformDarwin {
+		out, err := RemoveServiceCommand(fmt.Sprintf("%s/bin/gpssh", gpHome), append(args, "remove", fmt.Sprintf("%s_agent", serviceName))...).CombinedOutput()
+		if err != nil {
+			return fmt.Errorf("could not remove agent service %s on segment hosts: %v", fmt.Sprintf("%s_agent", serviceName), string(out))
+		}
+
+		return nil
+	}
+
+	out, err := RemoveServiceCommand(fmt.Sprintf("%s/bin/gpssh", gpHome), append(args, "disable", fmt.Sprintf("%s_agent", serviceName))...).CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("could not reload agent service file %s on segment hosts: %v", fmt.Sprintf("%s_agent", serviceName), string(out))
+	}
+
+	remoteAgentServiceFilePath := fmt.Sprintf("%s/%s_agent.%s", serviceDir, serviceName, p.ServiceExt)
+	err = p.ReloadAgentService(gpHome, hostList, remoteAgentServiceFilePath)
+	if err != nil {
+		return err
+	}
+
+	gplog.Info("Successfully deleted agent service")
+
+	return nil
+}
+
+func (p GpPlatform) RemoveHubServiceFile(serviceName string, serviceDir string) error {
+	hubServiceFilePath := filepath.Join(serviceDir, fmt.Sprintf("%s_hub.%s", serviceName, p.ServiceExt))
+
+	err := execCommand("rm", hubServiceFilePath).Run()
+	if err != nil {
+		return fmt.Errorf("could not remove hub service file %s: %w", hubServiceFilePath, err)
+	}
+
+	gplog.Info("Removed hub service file %s from coordinator host", hubServiceFilePath)
+	return nil
+}
+
+func (p GpPlatform) RemoveAgentServiceFile(gpHome string, serviceName string, serviceDir string, hostList []string) error {
+	remoteAgentServiceFilePath := filepath.Join(serviceDir, fmt.Sprintf("%s_agent.%s", serviceName, p.ServiceExt))
+
+	cmdArgs := append(hostList, "rm", remoteAgentServiceFilePath)
+	utility := filepath.Join(gpHome, "bin", constants.GpSSH)
+	err := execCommand(utility, cmdArgs...).Run()
+	if err != nil {
+		return fmt.Errorf("could not delete agent service file %s on hosts: %w", remoteAgentServiceFilePath, err)
+	}
+
+	gplog.Info("Removed agent service file %s from segment hosts", remoteAgentServiceFilePath)
+	return nil
 }
 
 func (p GpPlatform) GetServiceStatusMessage(serviceName string) (string, error) {

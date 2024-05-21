@@ -421,3 +421,11 @@ func SetExecCommand(command exectest.Command) {
 func ResetExecCommand() {
 	execCommand = exec.Command
 }
+
+func SetPlatform(p utils.Platform) {
+	platform = p
+}
+
+func ResetPlatform() {
+	platform = utils.GetPlatform()
+}

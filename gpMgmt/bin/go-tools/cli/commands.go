@@ -45,6 +45,7 @@ func RootCommand() *cobra.Command {
 		statusCmd(),
 		stopCmd(),
 		initCmd(),
+		deleteCmd(),
 	)
 
 	return root

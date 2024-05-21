@@ -14,6 +14,7 @@ import (
 var (
 	StopAgentService = StopAgentServiceFunc
 	StopHubService   = StopHubServiceFunc
+	RunStopServices  = RunStopServicesFunc
 )
 
 func stopCmd() *cobra.Command {
@@ -118,7 +119,7 @@ func StopServicesCmd() *cobra.Command {
 	return stopServicesCmd
 }
 
-func RunStopServices(cmd *cobra.Command, args []string) error {
+func RunStopServicesFunc(cmd *cobra.Command, args []string) error {
 	err := StopAgentService()
 	if err != nil {
 		return err

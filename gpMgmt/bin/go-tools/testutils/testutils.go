@@ -80,6 +80,18 @@ func (p *MockPlatform) GetStartHubCommand(serviceName string) *exec.Cmd {
 func (p *MockPlatform) GetStartAgentCommandString(serviceName string) []string {
 	return nil
 }
+func (p *MockPlatform) RemoveHubService(serviceName string, serviceDir string) error {
+	return nil
+}
+func (p *MockPlatform) RemoveAgentService(gpHome string, serviceName string, serviceDir string, hostList []string) error {
+	return nil
+}
+func (p *MockPlatform) RemoveHubServiceFile(serviceDir string, serviceName string) error {
+	return nil
+}
+func (p *MockPlatform) RemoveAgentServiceFile(gpHome string, serviceDir string, serviceName string, hostList []string) error {
+	return nil
+}
 func (p *MockPlatform) ParseServiceStatusMessage(message string) idl.ServiceStatus {
 	return idl.ServiceStatus{Status: p.RetStatus.Status, Pid: p.RetStatus.Pid, Uptime: p.RetStatus.Uptime}
 }
